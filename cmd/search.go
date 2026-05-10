@@ -387,7 +387,7 @@ func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
 	}
 
 	overlap := len(needleBytes) - 1
-	buf := make([]byte, textSearchChunkSize)
+	buf := make([]byte, textSearchBufferSize(f))
 	tail := make([]byte, 0, overlap)
 	bridge := make([]byte, 0, overlap*2)
 	for {
@@ -418,6 +418,15 @@ func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
 		}
 		return false, readErr
 	}
+}
+
+func textSearchBufferSize(f *os.File) int {
+	size := textSearchChunkSize
+	info, err := f.Stat()
+	if err == nil && info.Size() > 0 && info.Size() < int64(size) {
+		size = int(info.Size())
+	}
+	return size
 }
 
 func updateSearchTail(tail, chunk []byte, count int) []byte {
