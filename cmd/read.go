@@ -80,18 +80,47 @@ func readCmd(args []string) error {
 	asset.ScriptIndex = scripts
 	roots := asset.Hierarchy()
 	flat := flattenHierarchy(roots)
-	if fieldGUIDs := fieldReferenceGUIDs(asset, flat, opts); len(fieldGUIDs) > 0 {
+	components := buildReadComponentView(asset, flat)
+	if fieldGUIDs := fieldReferenceGUIDs(asset, flat, components, opts); len(fieldGUIDs) > 0 {
 		guidIndex, err := unityasset.BuildGUIDIndexForGUIDs(project, fieldGUIDs)
 		if err != nil {
 			return err
 		}
 		asset.GUIDIndex = guidIndex
 	}
-	printRead(asset, roots, flat, opts)
+	printRead(asset, roots, flat, components, opts)
 	return nil
 }
 
-func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, opts readOptions) map[string]bool {
+type readComponentView struct {
+	byGO  map[string][]unityasset.Component
+	count int
+	names []string
+}
+
+func buildReadComponentView(asset *unityasset.Asset, nodes []*unityasset.Node) readComponentView {
+	view := readComponentView{byGO: map[string][]unityasset.Component{}}
+	seenNames := map[string]bool{}
+	for _, node := range nodes {
+		components := asset.ComponentsFor(node.GameObject.ID)
+		view.byGO[node.GameObject.ID] = components
+		view.count += len(components)
+		for _, component := range components {
+			if seenNames[component.Name] {
+				continue
+			}
+			seenNames[component.Name] = true
+			view.names = append(view.names, component.Name)
+		}
+	}
+	return view
+}
+
+func (v readComponentView) components(goID string) []unityasset.Component {
+	return v.byGO[goID]
+}
+
+func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, opts readOptions) map[string]bool {
 	guids := map[string]bool{}
 	if asset.Kind == "asset" {
 		addObjectVisibleFieldGUIDs(guids, asset.Objects, opts.fieldLimit)
@@ -104,7 +133,7 @@ func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, opts
 		if opts.path != "" && !containsFold(node.Path, opts.path) {
 			continue
 		}
-		for _, component := range asset.ComponentsFor(node.GameObject.ID) {
+		for _, component := range components.components(node.GameObject.ID) {
 			if containsFold(component.Name, opts.component) {
 				unityasset.AddVisibleFieldGUIDs(guids, component.Object, opts.fieldLimit)
 			}
@@ -119,12 +148,7 @@ func addObjectVisibleFieldGUIDs(guids map[string]bool, objects []*unityasset.Obj
 	}
 }
 
-func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unityasset.Node, opts readOptions) {
-	componentCount := 0
-	for _, goObj := range asset.GameObjects() {
-		componentCount += len(asset.ComponentsFor(goObj.ID))
-	}
-
+func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unityasset.Node, components readComponentView, opts readOptions) {
 	fmt.Printf("ASSET       %s\n", asset.Kind)
 	fmt.Printf("PATH        %s\n", asset.Path)
 	if asset.GUID != "" {
@@ -134,7 +158,7 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 		fmt.Printf("YAML_OBJECTS %d\n", len(asset.Objects))
 	} else {
 		fmt.Printf("OBJECTS     %d\n", len(flat))
-		fmt.Printf("COMPONENTS  %d\n", componentCount)
+		fmt.Printf("COMPONENTS  %d\n", components.count)
 		if opts.component == "" {
 			fmt.Printf("DEPTH       %d\n", opts.depth)
 		}
@@ -146,11 +170,11 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 		return
 	}
 	if opts.component != "" {
-		printComponentRead(asset, flat, opts)
+		printComponentRead(asset, flat, components, opts)
 		return
 	}
 
-	printHierarchy(asset, roots, opts)
+	printHierarchy(asset, roots, components, opts)
 }
 
 func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {
@@ -166,8 +190,8 @@ func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {
 	return out
 }
 
-func printHierarchy(asset *unityasset.Asset, roots []*unityasset.Node, opts readOptions) {
-	rows, hidden := collectHierarchyRows(asset, roots, opts)
+func printHierarchy(asset *unityasset.Asset, roots []*unityasset.Node, components readComponentView, opts readOptions) {
+	rows, hidden := collectHierarchyRows(asset, roots, components, opts)
 	focusRows, focusHidden := limitFocusRows(rows, opts.limit)
 	treeRows, limitHidden := limitTreeRows(rows, opts.limit)
 	hidden += limitHidden
@@ -195,7 +219,7 @@ type hierarchyRow struct {
 	RenderOnly   bool
 }
 
-func collectHierarchyRows(asset *unityasset.Asset, roots []*unityasset.Node, opts readOptions) ([]hierarchyRow, int) {
+func collectHierarchyRows(asset *unityasset.Asset, roots []*unityasset.Node, components readComponentView, opts readOptions) ([]hierarchyRow, int) {
 	rows := make([]hierarchyRow, 0)
 	hidden := 0
 	var walk func(nodes []*unityasset.Node)
@@ -211,7 +235,7 @@ func collectHierarchyRows(asset *unityasset.Asset, roots []*unityasset.Node, opt
 				hidden += countNodes([]*unityasset.Node{node})
 				continue
 			}
-			rows = append(rows, newHierarchyRow(asset, len(rows), node))
+			rows = append(rows, newHierarchyRow(components, len(rows), node))
 			walk(node.Children)
 		}
 	}
@@ -255,10 +279,10 @@ func mergeRows(groups ...[]hierarchyRow) []hierarchyRow {
 	return merged
 }
 
-func newHierarchyRow(asset *unityasset.Asset, index int, node *unityasset.Node) hierarchyRow {
-	components := asset.ComponentsFor(node.GameObject.ID)
-	names := make([]string, 0, len(components))
-	for _, component := range components {
+func newHierarchyRow(components readComponentView, index int, node *unityasset.Node) hierarchyRow {
+	componentList := components.components(node.GameObject.ID)
+	names := make([]string, 0, len(componentList))
+	for _, component := range componentList {
 		names = append(names, component.Name)
 	}
 	return hierarchyRow{
@@ -463,14 +487,14 @@ func printYAMLObjects(asset *unityasset.Asset, opts readOptions) {
 	}
 }
 
-func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, opts readOptions) {
+func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, opts readOptions) {
 	matches := 0
 	hidden := 0
 	for _, node := range nodes {
 		if opts.path != "" && !containsFold(node.Path, opts.path) {
 			continue
 		}
-		for _, component := range asset.ComponentsFor(node.GameObject.ID) {
+		for _, component := range components.components(node.GameObject.ID) {
 			if !containsFold(component.Name, opts.component) {
 				continue
 			}
@@ -501,7 +525,7 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, opts 
 	}
 	if matches == 0 {
 		fmt.Printf("no component matched %q\n", opts.component)
-		printAvailableComponents(asset)
+		printAvailableComponents(components)
 	}
 	if hidden > 0 {
 		fmt.Printf("more components: %d hidden by --limit\n", hidden)
@@ -515,19 +539,9 @@ func displayObjectName(obj *unityasset.Object) string {
 	return "<unnamed:" + obj.ID + ">"
 }
 
-func printAvailableComponents(asset *unityasset.Asset) {
-	seen := map[string]bool{}
-	var names []string
-	for _, goObj := range asset.GameObjects() {
-		for _, component := range asset.ComponentsFor(goObj.ID) {
-			if !seen[component.Name] {
-				seen[component.Name] = true
-				names = append(names, component.Name)
-			}
-		}
-	}
-	if len(names) > 0 {
-		fmt.Printf("available: %s\n", strings.Join(names, ", "))
+func printAvailableComponents(components readComponentView) {
+	if len(components.names) > 0 {
+		fmt.Printf("available: %s\n", strings.Join(components.names, ", "))
 	}
 }
 

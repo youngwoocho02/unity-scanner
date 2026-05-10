@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -83,7 +84,8 @@ Camera:
 		t.Fatal(err)
 	}
 
-	rows, hidden := collectHierarchyRows(asset, asset.Hierarchy(), readOptions{depth: 0, limit: 2})
+	roots := asset.Hierarchy()
+	rows, hidden := collectHierarchyRows(asset, roots, buildReadComponentView(asset, flattenHierarchy(roots)), readOptions{depth: 0, limit: 2})
 	if hidden != 0 || len(rows) != 3 {
 		t.Fatalf("rows=%d hidden=%d", len(rows), hidden)
 	}
@@ -137,7 +139,8 @@ MonoBehaviour:
 		"cccccccccccccccccccccccccccccccc": "Assets/Scripts/OtherComponent.cs",
 	}
 
-	guids := fieldReferenceGUIDs(asset, asset.FlattenNodes(), readOptions{component: "TargetComponent"})
+	nodes := asset.FlattenNodes()
+	guids := fieldReferenceGUIDs(asset, nodes, buildReadComponentView(asset, nodes), readOptions{component: "TargetComponent"})
 	if len(guids) != 1 || !guids["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] {
 		t.Fatalf("guids=%#v", guids)
 	}
@@ -156,7 +159,7 @@ MonoBehaviour:
 	}
 	asset.Kind = "asset"
 
-	guids := fieldReferenceGUIDs(asset, nil, readOptions{fieldLimit: 1})
+	guids := fieldReferenceGUIDs(asset, nil, readComponentView{}, readOptions{fieldLimit: 1})
 	if len(guids) != 1 || !guids["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] {
 		t.Fatalf("guids=%#v", guids)
 	}
@@ -248,4 +251,41 @@ MonoBehaviour:
 	if strings.Contains(out, "OtherComponent") || strings.Contains(out, "Assets/Data/Other.asset") {
 		t.Fatalf("non-matching component leaked:\n%s", out)
 	}
+}
+
+func BenchmarkReadHierarchyRowsManyComponents(b *testing.B) {
+	asset, err := unityasset.ParseAsset([]byte(readBenchmarkPrefabYAML(1000)))
+	if err != nil {
+		b.Fatal(err)
+	}
+	roots := asset.Hierarchy()
+	flat := flattenHierarchy(roots)
+	components := buildReadComponentView(asset, flat)
+	opts := readOptions{depth: 999, limit: 2000}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		rows, hidden := collectHierarchyRows(asset, roots, components, opts)
+		if len(rows) != 1000 || hidden != 0 {
+			b.Fatalf("rows=%d hidden=%d", len(rows), hidden)
+		}
+	}
+}
+
+func readBenchmarkPrefabYAML(count int) string {
+	var b strings.Builder
+	b.WriteString("%YAML 1.1\n")
+	for i := 0; i < count; i++ {
+		goID := 100000 + i
+		transformID := 200000 + i
+		rendererID := 300000 + i
+		b.WriteString(fmt.Sprintf("--- !u!1 &%d\nGameObject:\n", goID))
+		b.WriteString(fmt.Sprintf("  m_Component:\n  - component: {fileID: %d}\n  - component: {fileID: %d}\n", transformID, rendererID))
+		b.WriteString(fmt.Sprintf("  m_Name: Mesh_%04d\n", i))
+		b.WriteString(fmt.Sprintf("--- !u!4 &%d\nTransform:\n", transformID))
+		b.WriteString(fmt.Sprintf("  m_GameObject: {fileID: %d}\n  m_Father: {fileID: 0}\n", goID))
+		b.WriteString(fmt.Sprintf("--- !u!23 &%d\nMeshRenderer:\n", rendererID))
+		b.WriteString(fmt.Sprintf("  m_GameObject: {fileID: %d}\n", goID))
+	}
+	return b.String()
 }
