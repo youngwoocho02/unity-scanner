@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"bytes"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/youngwoocho02/unity-scanner/internal/unityasset"
@@ -99,5 +102,131 @@ func TestCollapsedRunRequiresSameDepthAndComponentSet(t *testing.T) {
 
 	if got := collapsibleRunEnd(rows, 0); got != 2 {
 		t.Fatalf("run end=%d", got)
+	}
+}
+
+func TestFieldReferenceGUIDsFiltersComponentAndSkipsScript(t *testing.T) {
+	asset, err := unityasset.ParseAsset([]byte(`%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: 300}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  target: {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+--- !u!114 &301
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: cccccccccccccccccccccccccccccccc, type: 3}
+  target: {fileID: 1, guid: dddddddddddddddddddddddddddddddd, type: 2}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset.Kind = "prefab"
+	asset.ScriptIndex = unityasset.ScriptIndex{
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "Assets/Scripts/TargetComponent.cs",
+		"cccccccccccccccccccccccccccccccc": "Assets/Scripts/OtherComponent.cs",
+	}
+
+	guids := fieldReferenceGUIDs(asset, readOptions{component: "TargetComponent"})
+	if len(guids) != 1 || !guids["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] {
+		t.Fatalf("guids=%#v", guids)
+	}
+}
+
+func TestReadCmdResolvesFieldReferencesWithTargetedGUIDIndex(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "ConfigAsset.cs.meta"), "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset"), "x")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Config.asset.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Config.asset"), `%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  m_Name: Config
+  target: {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Config.asset", "--field-limit", "10"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"ASSET       asset",
+		"script: Assets/Scripts/ConfigAsset.cs",
+		"target                   {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2} -> Assets/Data/Target.asset",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ->") {
+		t.Fatalf("script guid was resolved as field ref:\n%s", out)
+	}
+}
+
+func TestReadCmdReportsComponentFieldsOnlyForMatchingComponent(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "TargetComponent.cs.meta"), "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "OtherComponent.cs.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset"), "x")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Data", "Other.asset"), "x")
+	writeTestFile(t, filepath.Join(assets, "Data", "Other.asset.meta"), "guid: dddddddddddddddddddddddddddddddd\n")
+	writeTestFile(t, filepath.Join(assets, "Item.prefab.meta"), "guid: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n")
+	writeTestFile(t, filepath.Join(assets, "Item.prefab"), `%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: 300}
+  - component: {fileID: 301}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  target: {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+--- !u!114 &301
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: cccccccccccccccccccccccccccccccc, type: 3}
+  other: {fileID: 1, guid: dddddddddddddddddddddddddddddddd, type: 2}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Item.prefab", "--component", "TargetComponent", "--field-limit", "10"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "COMPONENT  TargetComponent") ||
+		!strings.Contains(out, "-> Assets/Data/Target.asset") {
+		t.Fatalf("target component not resolved:\n%s", out)
+	}
+	if strings.Contains(out, "OtherComponent") || strings.Contains(out, "Assets/Data/Other.asset") {
+		t.Fatalf("non-matching component leaked:\n%s", out)
 	}
 }

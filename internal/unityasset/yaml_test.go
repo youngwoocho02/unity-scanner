@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -191,6 +192,77 @@ MonoBehaviour:
 	}
 	if asset.Objects[2].ScriptGUID != "abcdef123456" {
 		t.Fatalf("script guid=%q", asset.Objects[2].ScriptGUID)
+	}
+}
+
+func TestParseAssetSummaryMatchesFullParseStructure(t *testing.T) {
+	data := []byte(`%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: -300}
+  m_Name: "Root Object"
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &-300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: ABCDEF1234567890ABCDEF1234567890, type: 3}
+--- !u!1 &101
+GameObject:
+  m_Component:
+  - component: {fileID: 201}
+  m_Name: Child
+--- !u!4 &201
+Transform:
+  m_GameObject: {fileID: 101}
+  m_Father: {fileID: 200}
+`)
+	full, err := ParseAsset(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := ParseAssetSummary(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(full.Objects) != len(summary.Objects) {
+		t.Fatalf("objects full=%d summary=%d", len(full.Objects), len(summary.Objects))
+	}
+	for i := range full.Objects {
+		f := full.Objects[i]
+		s := summary.Objects[i]
+		if s.Lines != nil {
+			t.Fatalf("summary object %d kept lines: %#v", i, s.Lines)
+		}
+		if f.ID != s.ID || f.ClassID != s.ClassID || f.Type != s.Type || f.Order != s.Order ||
+			f.Name != s.Name || f.GameObjectID != s.GameObjectID ||
+			f.FatherTransformID != s.FatherTransformID || f.ScriptGUID != s.ScriptGUID ||
+			!reflect.DeepEqual(f.ComponentIDs, s.ComponentIDs) {
+			t.Fatalf("object %d differs\nfull=%#v\nsummary=%#v", i, f, s)
+		}
+	}
+	if got, want := hierarchyPaths(summary), []string{"Root Object", "Root Object/Child"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("paths=%#v want=%#v", got, want)
+	}
+}
+
+func TestExtractUnityYAMLReferences(t *testing.T) {
+	if classID, id, ok := parseHeaderLine([]byte("--- !u!114 &-300")); !ok || classID != 114 || id != "-300" {
+		t.Fatalf("header classID=%d id=%q ok=%v", classID, id, ok)
+	}
+	if got := extractFileID("  m_GameObject: {fileID: -123, guid: abc}"); got != "-123" {
+		t.Fatalf("fileID=%q", got)
+	}
+	if got := extractGUID("  ref: {fileID: 1, guid: ABCDEF1234567890, type: 3}"); got != "abcdef1234567890" {
+		t.Fatalf("guid=%q", got)
+	}
+	if got := findGUIDs("a {guid: ABCDEF} b {guid: 123456} c"); !reflect.DeepEqual(got, []string{"abcdef", "123456"}) {
+		t.Fatalf("guids=%#v", got)
 	}
 }
 
@@ -382,6 +454,14 @@ func largePrefabYAML(count int) string {
 		b.WriteString("}\n")
 	}
 	return b.String()
+}
+
+func hierarchyPaths(asset *Asset) []string {
+	var paths []string
+	for _, node := range asset.FlattenNodes() {
+		paths = append(paths, node.Path)
+	}
+	return paths
 }
 
 func benchmarkScriptProject(b *testing.B, count int) Project {
