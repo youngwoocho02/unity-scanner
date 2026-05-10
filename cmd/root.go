@@ -31,23 +31,16 @@ func Execute(args []string) error {
 	case "update":
 		return updateCmd(args[1:])
 	case "list", "ls":
-		return runWithUpdateNotice(listCmd(args[1:]))
+		return listCmd(args[1:])
 	case "read", "cat":
-		return runWithUpdateNotice(readCmd(args[1:]))
+		return readCmd(args[1:])
 	case "search", "find":
-		return runWithUpdateNotice(searchCmd(args[1:]))
+		return searchCmd(args[1:])
 	case "refs":
-		return runWithUpdateNotice(refsCmd(args[1:]))
+		return refsCmd(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
-}
-
-func runWithUpdateNotice(err error) error {
-	if err == nil {
-		printUpdateNotice()
-	}
-	return err
 }
 
 type commonOptions struct {

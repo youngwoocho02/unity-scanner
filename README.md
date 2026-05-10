@@ -55,7 +55,7 @@ unity-scanner update
 unity-scanner update --check
 ```
 
-Installed release builds also print a cached update notice during normal commands when a newer GitHub release is available.
+Update checks run only when `unity-scanner update` or `unity-scanner update --check` is called.
 
 ## Commands
 

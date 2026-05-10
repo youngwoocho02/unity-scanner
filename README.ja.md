@@ -55,7 +55,7 @@ unity-scanner update
 unity-scanner update --check
 ```
 
-release build で入れた場合、新しい GitHub release があれば通常 command 実行時にも cache 済みの update notice を出す。
+update 確認は `unity-scanner update` または `unity-scanner update --check` を実行した時だけ行う。
 
 ## コマンド
 

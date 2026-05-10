@@ -55,7 +55,7 @@ unity-scanner update
 unity-scanner update --check
 ```
 
-릴리스 빌드로 설치한 경우 새 GitHub 릴리스가 있으면 일반 명령 실행 중에도 캐시된 업데이트 안내를 출력한다.
+업데이트 확인은 `unity-scanner update` 또는 `unity-scanner update --check`를 실행할 때만 수행한다.
 
 ## 명령
 
