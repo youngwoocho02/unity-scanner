@@ -124,6 +124,27 @@ func TestAddFieldGUIDsSkipsScriptGUID(t *testing.T) {
 	}
 }
 
+func TestAddVisibleFieldGUIDsHonorsFieldLimitAndNestedFields(t *testing.T) {
+	obj := &Object{Lines: []string{
+		"  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}",
+		"  first:",
+		"    nested: {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}",
+		"  second: {fileID: 1, guid: cccccccccccccccccccccccccccccccc, type: 2}",
+		"  third: {fileID: 1, guid: dddddddddddddddddddddddddddddddd, type: 2}",
+	}}
+	guids := map[string]bool{}
+
+	AddVisibleFieldGUIDs(guids, obj, 2)
+	if len(guids) != 2 ||
+		!guids["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] ||
+		!guids["cccccccccccccccccccccccccccccccc"] {
+		t.Fatalf("guids=%#v", guids)
+	}
+	if guids["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] || guids["dddddddddddddddddddddddddddddddd"] {
+		t.Fatalf("hidden or script guid leaked: %#v", guids)
+	}
+}
+
 func TestFieldsWithHidden(t *testing.T) {
 	asset := &Asset{}
 	obj := &Object{Lines: []string{

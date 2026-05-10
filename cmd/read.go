@@ -94,7 +94,7 @@ func readCmd(args []string) error {
 func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, opts readOptions) map[string]bool {
 	guids := map[string]bool{}
 	if asset.Kind == "asset" {
-		addObjectFieldGUIDs(guids, asset.Objects)
+		addObjectVisibleFieldGUIDs(guids, asset.Objects, opts.fieldLimit)
 		return guids
 	}
 	if opts.component == "" {
@@ -106,16 +106,16 @@ func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, opts
 		}
 		for _, component := range asset.ComponentsFor(node.GameObject.ID) {
 			if containsFold(component.Name, opts.component) {
-				unityasset.AddFieldGUIDs(guids, component.Object)
+				unityasset.AddVisibleFieldGUIDs(guids, component.Object, opts.fieldLimit)
 			}
 		}
 	}
 	return guids
 }
 
-func addObjectFieldGUIDs(guids map[string]bool, objects []*unityasset.Object) {
+func addObjectVisibleFieldGUIDs(guids map[string]bool, objects []*unityasset.Object, limit int) {
 	for _, obj := range objects {
-		unityasset.AddFieldGUIDs(guids, obj)
+		unityasset.AddVisibleFieldGUIDs(guids, obj, limit)
 	}
 }
 

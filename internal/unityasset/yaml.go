@@ -218,12 +218,52 @@ func AddFieldGUIDs(guids map[string]bool, obj *Object) {
 		return
 	}
 	for _, line := range obj.Lines {
-		if !strings.Contains(line, "guid:") || strings.Contains(line, "m_Script") {
+		addLineGUIDs(guids, line)
+	}
+}
+
+func AddVisibleFieldGUIDs(guids map[string]bool, obj *Object, limit int) {
+	if obj == nil {
+		return
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	visible := 0
+	for i := 0; i < len(obj.Lines); i++ {
+		line := obj.Lines[i]
+		if !isTopLevelFieldLine(line) {
 			continue
 		}
-		for _, guid := range findGUIDs(line) {
-			guids[guid] = true
+		trim := strings.TrimSpace(line)
+		parts := strings.SplitN(trim, ":", 2)
+		if len(parts) != 2 {
+			continue
 		}
+		key := strings.TrimSpace(parts[0])
+		if skipField(key) {
+			continue
+		}
+		if visible >= limit {
+			return
+		}
+		visible++
+		addLineGUIDs(guids, line)
+		if strings.TrimSpace(parts[1]) != "" {
+			continue
+		}
+		for j := i + 1; j < len(obj.Lines) && !isTopLevelFieldLine(obj.Lines[j]); j++ {
+			addLineGUIDs(guids, obj.Lines[j])
+		}
+	}
+}
+
+func addLineGUIDs(guids map[string]bool, line string) {
+	if !strings.Contains(line, "guid:") || strings.Contains(line, "m_Script") {
+		return
+	}
+	for _, guid := range findGUIDs(line) {
+		guids[guid] = true
 	}
 }
 
@@ -342,10 +382,7 @@ func (a *Asset) FieldsWithHidden(obj *Object, limit int) ([]Field, int) {
 	hidden := 0
 	for i := 0; i < len(obj.Lines); i++ {
 		line := obj.Lines[i]
-		if !strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "    ") {
-			continue
-		}
-		if strings.HasPrefix(line, "  -") {
+		if !isTopLevelFieldLine(line) {
 			continue
 		}
 		trim := strings.TrimSpace(line)
@@ -419,6 +456,12 @@ func summarizeNested(lines []string, start int) string {
 		return "<object>"
 	}
 	return strings.Join(parts, " | ")
+}
+
+func isTopLevelFieldLine(line string) bool {
+	return strings.HasPrefix(line, "  ") &&
+		!strings.HasPrefix(line, "    ") &&
+		!strings.HasPrefix(line, "  -")
 }
 
 func (a *Asset) ObjectPath(goID string) string {

@@ -143,6 +143,25 @@ MonoBehaviour:
 	}
 }
 
+func TestFieldReferenceGUIDsHonorsFieldLimit(t *testing.T) {
+	asset, err := unityasset.ParseAsset([]byte(`%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  first: {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+  second: {fileID: 1, guid: cccccccccccccccccccccccccccccccc, type: 2}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset.Kind = "asset"
+
+	guids := fieldReferenceGUIDs(asset, nil, readOptions{fieldLimit: 1})
+	if len(guids) != 1 || !guids["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] {
+		t.Fatalf("guids=%#v", guids)
+	}
+}
+
 func TestReadCmdResolvesFieldReferencesWithTargetedGUIDIndex(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")
