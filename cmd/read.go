@@ -110,7 +110,8 @@ func shouldResolveFieldReferences(asset *unityasset.Asset, opts readOptions) boo
 }
 
 func printRead(asset *unityasset.Asset, opts readOptions) {
-	flat := asset.FlattenNodes()
+	roots := asset.Hierarchy()
+	flat := flattenHierarchy(roots)
 	componentCount := 0
 	for _, goObj := range asset.GameObjects() {
 		componentCount += len(asset.ComponentsFor(goObj.ID))
@@ -137,15 +138,27 @@ func printRead(asset *unityasset.Asset, opts readOptions) {
 		return
 	}
 	if opts.component != "" {
-		printComponentRead(asset, opts)
+		printComponentRead(asset, flat, opts)
 		return
 	}
 
-	printHierarchy(asset, opts)
+	printHierarchy(asset, roots, opts)
 }
 
-func printHierarchy(asset *unityasset.Asset, opts readOptions) {
-	roots := asset.Hierarchy()
+func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {
+	var out []*unityasset.Node
+	var walk func(nodes []*unityasset.Node)
+	walk = func(nodes []*unityasset.Node) {
+		for _, node := range nodes {
+			out = append(out, node)
+			walk(node.Children)
+		}
+	}
+	walk(roots)
+	return out
+}
+
+func printHierarchy(asset *unityasset.Asset, roots []*unityasset.Node, opts readOptions) {
 	rows, hidden := collectHierarchyRows(asset, roots, opts)
 	focusRows, focusHidden := limitFocusRows(rows, opts.limit)
 	treeRows, limitHidden := limitTreeRows(rows, opts.limit)
@@ -442,10 +455,10 @@ func printYAMLObjects(asset *unityasset.Asset, opts readOptions) {
 	}
 }
 
-func printComponentRead(asset *unityasset.Asset, opts readOptions) {
+func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, opts readOptions) {
 	matches := 0
 	hidden := 0
-	for _, node := range asset.FlattenNodes() {
+	for _, node := range nodes {
 		if opts.path != "" && !containsFold(node.Path, opts.path) {
 			continue
 		}
