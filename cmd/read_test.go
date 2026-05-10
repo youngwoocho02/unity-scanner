@@ -85,7 +85,7 @@ Camera:
 	}
 
 	roots := asset.Hierarchy()
-	rows, hidden := collectHierarchyRows(asset, roots, buildReadComponentView(asset, flattenHierarchy(roots)), readOptions{depth: 0, limit: 2})
+	rows, hidden := collectHierarchyRows(roots, buildReadComponentView(asset, flattenHierarchy(roots)), readOptions{depth: 0, limit: 2})
 	if hidden != 0 || len(rows) != 3 {
 		t.Fatalf("rows=%d hidden=%d", len(rows), hidden)
 	}
@@ -265,7 +265,7 @@ func BenchmarkReadHierarchyRowsManyComponents(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		rows, hidden := collectHierarchyRows(asset, roots, components, opts)
+		rows, hidden := collectHierarchyRows(roots, components, opts)
 		if len(rows) != 1000 || hidden != 0 {
 			b.Fatalf("rows=%d hidden=%d", len(rows), hidden)
 		}

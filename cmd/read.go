@@ -174,7 +174,7 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 		return
 	}
 
-	printHierarchy(asset, roots, components, opts)
+	printHierarchy(roots, components, opts)
 }
 
 func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {
@@ -190,8 +190,8 @@ func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {
 	return out
 }
 
-func printHierarchy(asset *unityasset.Asset, roots []*unityasset.Node, components readComponentView, opts readOptions) {
-	rows, hidden := collectHierarchyRows(asset, roots, components, opts)
+func printHierarchy(roots []*unityasset.Node, components readComponentView, opts readOptions) {
+	rows, hidden := collectHierarchyRows(roots, components, opts)
 	focusRows, focusHidden := limitFocusRows(rows, opts.limit)
 	treeRows, limitHidden := limitTreeRows(rows, opts.limit)
 	hidden += limitHidden
@@ -219,7 +219,7 @@ type hierarchyRow struct {
 	RenderOnly   bool
 }
 
-func collectHierarchyRows(asset *unityasset.Asset, roots []*unityasset.Node, components readComponentView, opts readOptions) ([]hierarchyRow, int) {
+func collectHierarchyRows(roots []*unityasset.Node, components readComponentView, opts readOptions) ([]hierarchyRow, int) {
 	rows := make([]hierarchyRow, 0)
 	hidden := 0
 	var walk func(nodes []*unityasset.Node)
