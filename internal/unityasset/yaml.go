@@ -174,6 +174,16 @@ func (a *Asset) GameObjects() []*Object {
 	return out
 }
 
+func (a *Asset) ScriptGUIDs() map[string]bool {
+	guids := map[string]bool{}
+	for _, obj := range a.Objects {
+		if obj.ScriptGUID != "" {
+			guids[obj.ScriptGUID] = true
+		}
+	}
+	return guids
+}
+
 func (a *Asset) ComponentsFor(goID string) []Component {
 	goObj := a.ByID[goID]
 	if goObj == nil {
@@ -381,7 +391,14 @@ func (a *Asset) ObjectPath(goID string) string {
 }
 
 func BuildScriptIndex(p Project) (ScriptIndex, error) {
+	return BuildScriptIndexForGUIDs(p, nil)
+}
+
+func BuildScriptIndexForGUIDs(p Project, wanted map[string]bool) (ScriptIndex, error) {
 	index := ScriptIndex{}
+	if wanted != nil && len(wanted) == 0 {
+		return index, nil
+	}
 	err := filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -399,8 +416,14 @@ func BuildScriptIndex(p Project) (ScriptIndex, error) {
 		if guid == "" {
 			return nil
 		}
+		if wanted != nil && !wanted[strings.ToLower(guid)] {
+			return nil
+		}
 		scriptPath := strings.TrimSuffix(path, ".meta")
-		index[guid] = p.AssetPath(scriptPath)
+		index[strings.ToLower(guid)] = p.AssetPath(scriptPath)
+		if wanted != nil && len(index) == len(wanted) {
+			return filepath.SkipAll
+		}
 		return nil
 	})
 	return index, err

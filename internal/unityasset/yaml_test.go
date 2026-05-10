@@ -1,6 +1,10 @@
 package unityasset
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseAssetHierarchyAndComponents(t *testing.T) {
 	data := []byte(`%YAML 1.1
@@ -115,5 +119,52 @@ func TestFieldsWithHidden(t *testing.T) {
 	fields, hidden := asset.FieldsWithHidden(obj, 2)
 	if len(fields) != 2 || hidden != 1 {
 		t.Fatalf("fields=%#v hidden=%d", fields, hidden)
+	}
+}
+
+func TestScriptGUIDs(t *testing.T) {
+	asset, err := ParseAsset([]byte(`%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Script: {fileID: 11500000, guid: abcdef123456, type: 3}
+  m_Name: Config
+--- !u!114 &11400001
+MonoBehaviour:
+  m_Script: {fileID: 11500000, guid: abcdef123456, type: 3}
+  m_Name: ConfigTwo
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	guids := asset.ScriptGUIDs()
+	if len(guids) != 1 || !guids["abcdef123456"] {
+		t.Fatalf("guids=%#v", guids)
+	}
+}
+
+func TestBuildScriptIndexForGUIDs(t *testing.T) {
+	dir := t.TempDir()
+	scripts := filepath.Join(dir, "Assets", "Scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "Foo.cs.meta"), []byte("guid: abcdef123456\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "Bar.cs.meta"), []byte("guid: fedcba654321\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := OpenProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	index, err := BuildScriptIndexForGUIDs(project, map[string]bool{"abcdef123456": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index) != 1 || index["abcdef123456"] != "Assets/Scripts/Foo.cs" {
+		t.Fatalf("index=%#v", index)
 	}
 }

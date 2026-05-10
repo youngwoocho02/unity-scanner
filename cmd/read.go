@@ -69,14 +69,15 @@ func readCmd(args []string) error {
 		return fmt.Errorf("read supports Unity YAML assets, got %s", entry.Kind)
 	}
 
-	scripts, err := unityasset.BuildScriptIndex(project)
+	asset, err := unityasset.ReadAsset(project, entry, unityasset.ScriptIndex{})
 	if err != nil {
 		return err
 	}
-	asset, err := unityasset.ReadAsset(project, entry, scripts)
+	scripts, err := unityasset.BuildScriptIndexForGUIDs(project, asset.ScriptGUIDs())
 	if err != nil {
 		return err
 	}
+	asset.ScriptIndex = scripts
 	if shouldResolveFieldReferences(asset, opts) {
 		guidIndex, err := unityasset.BuildGUIDIndex(project)
 		if err != nil {
