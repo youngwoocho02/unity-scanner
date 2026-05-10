@@ -29,6 +29,7 @@
 - Unity 구조 활용. 계층, 컴포넌트 그룹, GUID, 경로 그룹
 - 기본 출력은 압축 우선. 반복 정보는 한 번만 선언하고 생략 개수는 표시
 - 큰 스캔은 파일 단위 병렬 처리
+- 단순 파이프라인 우선. 출력 감소나 Unity 구조 해석에 직접 도움 안 되는 래퍼, fallback, 기능은 추가하지 않음
 
 아래 예시의 토큰 수는 정확한 토크나이저 결과가 아니라 `글자 수 / 4` 기준의 대략값이다. 모델마다 실제 토큰 수는 달라질 수 있다.
 
@@ -46,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/
 irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
 ```
 
-설치 스크립트는 최신 릴리스 바이너리를 받고 설치 디렉터리를 `PATH`에 추가한다.
+설치 스크립트는 최신 릴리스 바이너리를 받고 설치 디렉터리를 `PATH`에 추가한다. 설치 후 명령은 `unity-scanner ...`로 실행한다.
 
 ### 업데이트
 
@@ -98,7 +99,7 @@ Assets/Examples/UI/InventoryPanel.prefab
 `unity-scanner`로 하면:
 
 ```bash
-./unity-scanner list -p /projects/SampleProject Assets/Examples --depth 2 --limit 8
+unity-scanner list -p /projects/SampleProject Assets/Examples --depth 2 --limit 8
 ```
 
 ```text
@@ -172,7 +173,7 @@ MeshRenderer:
 `unity-scanner`로 하면:
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --depth 2 --limit 30
+unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --depth 2 --limit 30
 ```
 
 ```text
@@ -214,12 +215,18 @@ unity-scanner read: 약   30줄,    900글자, 약   225토큰
 ### Component Drilldown
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --component MeshRenderer --path SampleMeshRoot --field-limit 3 --limit 3
+unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --component MeshRenderer --path SampleMeshRoot --field-limit 3 --limit 3
 ```
 
 출력 형태:
 
 ```text
+ASSET       prefab
+PATH        Assets/Examples/Prefabs/SamplePrefab.prefab
+GUID        0123456789abcdef0123456789abcdef
+OBJECTS     64
+COMPONENTS  138
+
 COMPONENT  MeshRenderer
 OBJECT     SampleRoot/SampleMeshRoot/SampleMesh
 fields:
@@ -234,7 +241,7 @@ more components: 5 hidden by --limit
 ### ScriptableObject Asset
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Data/SampleConfig.asset --field-limit 4
+unity-scanner read -p /projects/SampleProject Assets/Examples/Data/SampleConfig.asset --field-limit 4
 ```
 
 ```text
@@ -270,7 +277,7 @@ Assets/Examples/Prefabs/UI/SamplePanel.prefab:12:  m_Name: SamplePanel
 `unity-scanner`로 하면:
 
 ```bash
-./unity-scanner search -p /projects/SampleProject Assets/Examples/Prefabs --name Sample --type prefab --limit 5
+unity-scanner search -p /projects/SampleProject Assets/Examples/Prefabs --name Sample --type prefab --limit 5
 ```
 
 ```text
@@ -282,12 +289,8 @@ MATCHES  3
 [prefab] Common
   SamplePrefab
     file-name
-    object: SampleRoot
-    components: Transform
   SampleVariant
     file-name
-    object: SampleRoot
-    components: Transform
 [prefab] UI
   SamplePanel
     file-name
@@ -297,11 +300,11 @@ MATCHES  3
 
 ```text
 일반 grep/find:        약 40줄, 2600글자, 약 650토큰
-unity-scanner search: 약 15줄,  520글자, 약 130토큰
+unity-scanner search: 약 11줄,  320글자, 약 80토큰
 감소:                  글자 기준 약 80%
 ```
 
-경로와 확장자 반복은 그룹으로 줄인다. 매칭 이유는 `file-name`, `object`, `components`, GUID 참조처럼 구조적으로 표시한다.
+경로와 확장자 반복은 그룹으로 줄인다. 파일명이 이름 검색에 이미 맞으면 YAML 내부는 펼치지 않고 `file-name`만 표시한다. 매칭 이유는 `file-name`, `object`, `components`, GUID 참조처럼 구조적으로 표시한다.
 
 넓은 범위 검색은 효과가 있을 때 파일 단위 병렬 처리를 사용한다.
 
@@ -330,7 +333,7 @@ Assets/Examples/Data/SamplePreset.asset:44:  source: {fileID: 11400000, guid: 33
 `unity-scanner`로 하면:
 
 ```bash
-./unity-scanner refs -p /projects/SampleProject Assets/Examples/Scripts/SampleConfig.cs Assets/Examples/Data --limit 5
+unity-scanner refs -p /projects/SampleProject Assets/Examples/Scripts/SampleConfig.cs Assets/Examples/Data --limit 5
 ```
 
 ```text

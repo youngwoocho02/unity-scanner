@@ -29,6 +29,7 @@
 - Unity-aware compression: hierarchy, component groups, GUIDs, path groups.
 - Compact by default: repeated data is declared once, omitted counts are shown.
 - Parallel where useful: broad scans split work by file.
+- Simple pipeline first: no extra wrappers, fallback layers, or features unless they reduce output or clarify Unity structure.
 
 Token counts in examples below are approximate. They use `chars / 4` because exact tokens depend on the model tokenizer.
 
@@ -46,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/
 irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
 ```
 
-The installer downloads the latest release binary and adds the install directory to `PATH`.
+The installer downloads the latest release binary and adds the install directory to `PATH`. After installing, run commands as `unity-scanner ...`.
 
 ### Update
 
@@ -98,7 +99,7 @@ Assets/Examples/UI/InventoryPanel.prefab
 With `unity-scanner`:
 
 ```bash
-./unity-scanner list -p /projects/SampleProject Assets/Examples --depth 2 --limit 8
+unity-scanner list -p /projects/SampleProject Assets/Examples --depth 2 --limit 8
 ```
 
 ```text
@@ -172,7 +173,7 @@ MeshRenderer:
 With `unity-scanner`:
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --depth 2 --limit 30
+unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --depth 2 --limit 30
 ```
 
 ```text
@@ -214,12 +215,18 @@ Raw object blocks become a GameObject tree. Repeated component sets are declared
 ### Component Drilldown
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --component MeshRenderer --path SampleMeshRoot --field-limit 3 --limit 3
+unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --component MeshRenderer --path SampleMeshRoot --field-limit 3 --limit 3
 ```
 
 Output shape:
 
 ```text
+ASSET       prefab
+PATH        Assets/Examples/Prefabs/SamplePrefab.prefab
+GUID        0123456789abcdef0123456789abcdef
+OBJECTS     64
+COMPONENTS  138
+
 COMPONENT  MeshRenderer
 OBJECT     SampleRoot/SampleMeshRoot/SampleMesh
 fields:
@@ -234,7 +241,7 @@ more components: 5 hidden by --limit
 ### ScriptableObject Asset
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Data/SampleConfig.asset --field-limit 4
+unity-scanner read -p /projects/SampleProject Assets/Examples/Data/SampleConfig.asset --field-limit 4
 ```
 
 ```text
@@ -270,7 +277,7 @@ Assets/Examples/Prefabs/UI/SamplePanel.prefab:12:  m_Name: SamplePanel
 With `unity-scanner`:
 
 ```bash
-./unity-scanner search -p /projects/SampleProject Assets/Examples/Prefabs --name Sample --type prefab --limit 5
+unity-scanner search -p /projects/SampleProject Assets/Examples/Prefabs --name Sample --type prefab --limit 5
 ```
 
 ```text
@@ -282,12 +289,8 @@ MATCHES  3
 [prefab] Common
   SamplePrefab
     file-name
-    object: SampleRoot
-    components: Transform
   SampleVariant
     file-name
-    object: SampleRoot
-    components: Transform
 [prefab] UI
   SamplePanel
     file-name
@@ -297,11 +300,11 @@ Difference:
 
 ```text
 plain grep/find:        about 40 lines, 2600 chars, about 650 tokens
-unity-scanner search:   about 15 lines, 520 chars,  about 130 tokens
+unity-scanner search:   about 11 lines, 320 chars,  about 80 tokens
 reduction:              about 80% fewer chars
 ```
 
-Path and extension repetition are grouped. Matches say whether the hit came from file name, GameObject, component, or GUID reference.
+Path and extension repetition are grouped. Name-only file hits stop at `file-name` instead of expanding YAML internals. Matches say whether the hit came from file name, GameObject, component, or GUID reference.
 
 Broad searches use file-level parallelism when it helps. Example timing shape from a large Unity project:
 
@@ -330,7 +333,7 @@ Assets/Examples/Data/SamplePreset.asset:44:  source: {fileID: 11400000, guid: 33
 With `unity-scanner`:
 
 ```bash
-./unity-scanner refs -p /projects/SampleProject Assets/Examples/Scripts/SampleConfig.cs Assets/Examples/Data --limit 5
+unity-scanner refs -p /projects/SampleProject Assets/Examples/Scripts/SampleConfig.cs Assets/Examples/Data --limit 5
 ```
 
 ```text

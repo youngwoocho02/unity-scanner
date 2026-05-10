@@ -29,6 +29,7 @@
 - Unity 構造を使う。階層、コンポーネントグループ、GUID、パスグループ
 - デフォルト出力は圧縮優先。繰り返し情報は一度だけ宣言し、省略数は表示
 - 大きな scan はファイル単位で並列処理
+- 単純な pipeline を優先。出力削減や Unity 構造の解釈に直接効かない wrapper、fallback、機能は追加しない
 
 下の例のトークン数は正確なトークナイザー結果ではなく、`文字数 / 4` の概算。実際のトークン数はモデルによって変わる。
 
@@ -46,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/
 irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
 ```
 
-installer は latest release binary を download し、install directory を `PATH` に追加する。
+installer は latest release binary を download し、install directory を `PATH` に追加する。install 後の command は `unity-scanner ...` で実行する。
 
 ### update
 
@@ -98,7 +99,7 @@ Assets/Examples/UI/InventoryPanel.prefab
 `unity-scanner` の場合:
 
 ```bash
-./unity-scanner list -p /projects/SampleProject Assets/Examples --depth 2 --limit 8
+unity-scanner list -p /projects/SampleProject Assets/Examples --depth 2 --limit 8
 ```
 
 ```text
@@ -172,7 +173,7 @@ MeshRenderer:
 `unity-scanner` の場合:
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --depth 2 --limit 30
+unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --depth 2 --limit 30
 ```
 
 ```text
@@ -214,12 +215,18 @@ unity-scanner read: 約   30行,    900文字, 約   225トークン
 ### Component Drilldown
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --component MeshRenderer --path SampleMeshRoot --field-limit 3 --limit 3
+unity-scanner read -p /projects/SampleProject Assets/Examples/Prefabs/SamplePrefab.prefab --component MeshRenderer --path SampleMeshRoot --field-limit 3 --limit 3
 ```
 
 出力形:
 
 ```text
+ASSET       prefab
+PATH        Assets/Examples/Prefabs/SamplePrefab.prefab
+GUID        0123456789abcdef0123456789abcdef
+OBJECTS     64
+COMPONENTS  138
+
 COMPONENT  MeshRenderer
 OBJECT     SampleRoot/SampleMeshRoot/SampleMesh
 fields:
@@ -234,7 +241,7 @@ more components: 5 hidden by --limit
 ### ScriptableObject Asset
 
 ```bash
-./unity-scanner read -p /projects/SampleProject Assets/Examples/Data/SampleConfig.asset --field-limit 4
+unity-scanner read -p /projects/SampleProject Assets/Examples/Data/SampleConfig.asset --field-limit 4
 ```
 
 ```text
@@ -270,7 +277,7 @@ Assets/Examples/Prefabs/UI/SamplePanel.prefab:12:  m_Name: SamplePanel
 `unity-scanner` の場合:
 
 ```bash
-./unity-scanner search -p /projects/SampleProject Assets/Examples/Prefabs --name Sample --type prefab --limit 5
+unity-scanner search -p /projects/SampleProject Assets/Examples/Prefabs --name Sample --type prefab --limit 5
 ```
 
 ```text
@@ -282,12 +289,8 @@ MATCHES  3
 [prefab] Common
   SamplePrefab
     file-name
-    object: SampleRoot
-    components: Transform
   SampleVariant
     file-name
-    object: SampleRoot
-    components: Transform
 [prefab] UI
   SamplePanel
     file-name
@@ -297,11 +300,11 @@ MATCHES  3
 
 ```text
 通常の grep/find:      約 40行, 2600文字, 約 650トークン
-unity-scanner search: 約 15行,  520文字, 約 130トークン
+unity-scanner search: 約 11行,  320文字, 約 80トークン
 削減:                 文字数で約 80%
 ```
 
-path と拡張子の繰り返しは group で減らす。一致理由は `file-name`, `object`, `components`, GUID reference のように構造化して表示する。
+path と拡張子の繰り返しは group で減らす。file name が name-only search に一致した場合、YAML 内部は展開せず `file-name` だけを表示する。一致理由は `file-name`, `object`, `components`, GUID reference のように構造化して表示する。
 
 広い範囲の検索では効果がある場合に file 単位で並列処理する。
 
@@ -330,7 +333,7 @@ Assets/Examples/Data/SamplePreset.asset:44:  source: {fileID: 11400000, guid: 33
 `unity-scanner` の場合:
 
 ```bash
-./unity-scanner refs -p /projects/SampleProject Assets/Examples/Scripts/SampleConfig.cs Assets/Examples/Data --limit 5
+unity-scanner refs -p /projects/SampleProject Assets/Examples/Scripts/SampleConfig.cs Assets/Examples/Data --limit 5
 ```
 
 ```text
