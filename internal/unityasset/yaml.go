@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -37,6 +36,14 @@ var nativeClassNames = map[int]string{
 	329:      "VideoPlayer",
 	73398921: "VFXRenderer",
 }
+
+var (
+	nameLinePrefix       = []byte("  m_Name:")
+	gameObjectLinePrefix = []byte("  m_GameObject:")
+	fatherLinePrefix     = []byte("  m_Father:")
+	scriptLinePrefix     = []byte("  m_Script:")
+	componentLineMarker  = []byte("- component:")
+)
 
 type Asset struct {
 	Path        string
@@ -83,12 +90,24 @@ type ScriptIndex map[string]string
 
 type GUIDIndex map[string]string
 
+type ParseOptions struct {
+	KeepLines bool
+}
+
 func ReadAsset(p Project, entry FileEntry, scripts ScriptIndex) (*Asset, error) {
+	return ReadAssetWithOptions(p, entry, scripts, ParseOptions{KeepLines: true})
+}
+
+func ReadAssetSummary(p Project, entry FileEntry, scripts ScriptIndex) (*Asset, error) {
+	return ReadAssetWithOptions(p, entry, scripts, ParseOptions{})
+}
+
+func ReadAssetWithOptions(p Project, entry FileEntry, scripts ScriptIndex, opts ParseOptions) (*Asset, error) {
 	data, err := os.ReadFile(entry.Abs)
 	if err != nil {
 		return nil, err
 	}
-	asset, err := ParseAsset(data)
+	asset, err := ParseAssetWithOptions(data, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -100,13 +119,21 @@ func ReadAsset(p Project, entry FileEntry, scripts ScriptIndex) (*Asset, error) 
 }
 
 func ParseAsset(data []byte) (*Asset, error) {
+	return ParseAssetWithOptions(data, ParseOptions{KeepLines: true})
+}
+
+func ParseAssetSummary(data []byte) (*Asset, error) {
+	return ParseAssetWithOptions(data, ParseOptions{})
+}
+
+func ParseAssetWithOptions(data []byte, opts ParseOptions) (*Asset, error) {
 	asset := &Asset{ByID: map[string]*Object{}}
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 1024), 1024*1024*16)
 
 	var current *Object
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := scanner.Bytes()
 		if classID, id, ok := parseHeaderLine(line); ok {
 			if current != nil {
 				asset.finishObject(current)
@@ -121,10 +148,12 @@ func ParseAsset(data []byte) (*Asset, error) {
 		if current == nil {
 			continue
 		}
-		current.Lines = append(current.Lines, line)
-		if current.Type == "" && strings.HasSuffix(line, ":") && !strings.HasPrefix(line, " ") {
-			current.Type = strings.TrimSuffix(strings.TrimSpace(line), ":")
+		if opts.KeepLines {
+			current.Lines = append(current.Lines, string(line))
+			scanObjectTypeLine(current, line)
+			continue
 		}
+		scanObjectLine(current, line)
 	}
 	if current != nil {
 		asset.finishObject(current)
@@ -139,18 +168,20 @@ func ParseAsset(data []byte) (*Asset, error) {
 }
 
 func (a *Asset) finishObject(o *Object) {
-	o.Name = readScalar(o.Lines, "m_Name")
-	switch o.Type {
-	case "GameObject":
-		o.ComponentIDs = readComponentIDs(o.Lines)
-	case "Transform", "RectTransform":
-		o.GameObjectID = readFileIDField(o.Lines, "m_GameObject")
-		o.FatherTransformID = readFileIDField(o.Lines, "m_Father")
-	default:
-		o.GameObjectID = readFileIDField(o.Lines, "m_GameObject")
-	}
-	if o.Type == "MonoBehaviour" {
-		o.ScriptGUID = readGUIDField(o.Lines, "m_Script")
+	if len(o.Lines) > 0 {
+		o.Name = readScalar(o.Lines, "m_Name")
+		switch o.Type {
+		case "GameObject":
+			o.ComponentIDs = readComponentIDs(o.Lines)
+		case "Transform", "RectTransform":
+			o.GameObjectID = readFileIDField(o.Lines, "m_GameObject")
+			o.FatherTransformID = readFileIDField(o.Lines, "m_Father")
+		default:
+			o.GameObjectID = readFileIDField(o.Lines, "m_GameObject")
+		}
+		if o.Type == "MonoBehaviour" {
+			o.ScriptGUID = readGUIDField(o.Lines, "m_Script")
+		}
 	}
 	a.Objects = append(a.Objects, o)
 	a.ByID[o.ID] = o
@@ -465,25 +496,74 @@ func NativeClassName(classID int) string {
 	return nativeClassNames[classID]
 }
 
-func parseHeaderLine(line string) (int, string, bool) {
-	const prefix = "--- !u!"
-	if !strings.HasPrefix(line, prefix) {
+func scanObjectLine(obj *Object, line []byte) {
+	if scanObjectTypeLine(obj, line) {
+		return
+	}
+	if obj.Name == "" && bytes.HasPrefix(line, nameLinePrefix) {
+		obj.Name = cleanScalar(string(bytes.TrimSpace(line[len(nameLinePrefix):])))
+		return
+	}
+	if bytes.HasPrefix(line, gameObjectLinePrefix) {
+		obj.GameObjectID = extractFileIDBytes(line)
+		return
+	}
+	if bytes.HasPrefix(line, fatherLinePrefix) {
+		obj.FatherTransformID = extractFileIDBytes(line)
+		return
+	}
+	if obj.Type == "GameObject" && bytes.Contains(line, componentLineMarker) {
+		if id := extractFileIDBytes(line); id != "" && id != "0" {
+			obj.ComponentIDs = append(obj.ComponentIDs, id)
+		}
+		return
+	}
+	if obj.Type == "MonoBehaviour" && bytes.HasPrefix(line, scriptLinePrefix) {
+		obj.ScriptGUID = extractGUIDBytes(line)
+	}
+}
+
+func scanObjectTypeLine(obj *Object, line []byte) bool {
+	if obj.Type != "" || len(line) <= 1 || line[0] == ' ' || line[len(line)-1] != ':' {
+		return false
+	}
+	obj.Type = strings.TrimSpace(string(line[:len(line)-1]))
+	return true
+}
+
+func parseHeaderLine(line []byte) (int, string, bool) {
+	prefix := []byte("--- !u!")
+	if !bytes.HasPrefix(line, prefix) {
 		return 0, "", false
 	}
 	rest := line[len(prefix):]
-	space := strings.IndexByte(rest, ' ')
+	space := bytes.IndexByte(rest, ' ')
 	if space <= 0 || space+2 > len(rest) || rest[space+1] != '&' {
 		return 0, "", false
 	}
-	classID, err := strconv.Atoi(rest[:space])
-	if err != nil {
+	classID, ok := parsePositiveInt(rest[:space])
+	if !ok {
 		return 0, "", false
 	}
-	id := rest[space+2:]
+	id := string(rest[space+2:])
 	if id == "" {
 		return 0, "", false
 	}
 	return classID, id, true
+}
+
+func parsePositiveInt(value []byte) (int, bool) {
+	if len(value) == 0 {
+		return 0, false
+	}
+	out := 0
+	for _, b := range value {
+		if b < '0' || b > '9' {
+			return 0, false
+		}
+		out = out*10 + int(b-'0')
+	}
+	return out, true
 }
 
 func readScalar(lines []string, key string) string {
@@ -550,12 +630,42 @@ func extractFileID(line string) string {
 	return line[begin:i]
 }
 
+func extractFileIDBytes(line []byte) string {
+	start := bytes.Index(line, []byte("fileID:"))
+	if start < 0 {
+		return ""
+	}
+	i := start + len("fileID:")
+	for i < len(line) && line[i] == ' ' {
+		i++
+	}
+	begin := i
+	if i < len(line) && line[i] == '-' {
+		i++
+	}
+	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
+		i++
+	}
+	if i == begin || (line[begin] == '-' && i == begin+1) {
+		return ""
+	}
+	return string(line[begin:i])
+}
+
 func extractGUID(line string) string {
 	start := strings.Index(line, "guid:")
 	if start < 0 {
 		return ""
 	}
 	return scanGUID(line[start+len("guid:"):])
+}
+
+func extractGUIDBytes(line []byte) string {
+	start := bytes.Index(line, []byte("guid:"))
+	if start < 0 {
+		return ""
+	}
+	return scanGUIDBytes(line[start+len("guid:"):])
 }
 
 func findGUIDs(value string) []string {
@@ -588,6 +698,21 @@ func scanGUID(value string) string {
 		return ""
 	}
 	return strings.ToLower(value[start:i])
+}
+
+func scanGUIDBytes(value []byte) string {
+	i := 0
+	for i < len(value) && value[i] == ' ' {
+		i++
+	}
+	start := i
+	for i < len(value) && isHex(value[i]) {
+		i++
+	}
+	if i == start {
+		return ""
+	}
+	return strings.ToLower(string(value[start:i]))
 }
 
 func isHex(b byte) bool {

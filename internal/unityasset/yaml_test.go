@@ -146,6 +146,41 @@ MonoBehaviour:
 	}
 }
 
+func TestParseAssetSummaryOmitsLinesButKeepsStructure(t *testing.T) {
+	asset, err := ParseAssetSummary([]byte(`%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: 300}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: ABCDEF123456, type: 3}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(asset.Objects[0].Lines) != 0 {
+		t.Fatalf("summary parse kept lines: %#v", asset.Objects[0].Lines)
+	}
+	if asset.Objects[0].Name != "Root" || len(asset.Objects[0].ComponentIDs) != 2 {
+		t.Fatalf("game object=%#v", asset.Objects[0])
+	}
+	if asset.Objects[1].GameObjectID != "100" || asset.Objects[1].FatherTransformID != "0" {
+		t.Fatalf("transform=%#v", asset.Objects[1])
+	}
+	if asset.Objects[2].ScriptGUID != "abcdef123456" {
+		t.Fatalf("script guid=%q", asset.Objects[2].ScriptGUID)
+	}
+}
+
 func TestBuildScriptIndexForGUIDs(t *testing.T) {
 	dir := t.TempDir()
 	scripts := filepath.Join(dir, "Assets", "Scripts")
@@ -180,6 +215,23 @@ func BenchmarkParseAssetLargePrefab(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		asset, err := ParseAsset(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(asset.Objects) != 2000 {
+			b.Fatalf("objects=%d", len(asset.Objects))
+		}
+	}
+}
+
+func BenchmarkParseAssetLargePrefabSummary(b *testing.B) {
+	data := []byte(largePrefabYAML(1000))
+
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		asset, err := ParseAssetSummary(data)
 		if err != nil {
 			b.Fatal(err)
 		}
