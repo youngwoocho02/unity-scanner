@@ -125,6 +125,54 @@ func BenchmarkRunSearchGUIDManyFiles(b *testing.B) {
 	}
 }
 
+func BenchmarkRunSearchFileNameHits(b *testing.B) {
+	dir := b.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		b.Fatal(err)
+	}
+	for i := 0; i < 128; i++ {
+		body := largeSearchPrefabYAML(200)
+		path := filepath.Join(assets, fmt.Sprintf("Target_%03d.prefab", i))
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			b.Fatal(err)
+		}
+	}
+	project, err := unityasset.OpenProject(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	result, err := unityasset.Scan(project, "Assets", unityasset.ScanOptions{Kinds: unityasset.ParseKindSet("prefab")})
+	if err != nil {
+		b.Fatal(err)
+	}
+	opts := searchOptions{name: "Target"}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		matches, warnings := runSearch(project, result.Files, unityasset.ScriptIndex{}, opts)
+		if len(matches) != 128 || len(warnings) != 0 {
+			b.Fatalf("matches=%d warnings=%d", len(matches), len(warnings))
+		}
+	}
+}
+
+func largeSearchPrefabYAML(count int) string {
+	var b strings.Builder
+	b.WriteString("%YAML 1.1\n")
+	for i := 0; i < count; i++ {
+		goID := 100000 + i
+		transformID := 200000 + i
+		b.WriteString(fmt.Sprintf("--- !u!1 &%d\nGameObject:\n", goID))
+		b.WriteString(fmt.Sprintf("  m_Component:\n  - component: {fileID: %d}\n", transformID))
+		b.WriteString(fmt.Sprintf("  m_Name: Object_%04d\n", i))
+		b.WriteString(fmt.Sprintf("--- !u!4 &%d\nTransform:\n", transformID))
+		b.WriteString(fmt.Sprintf("  m_GameObject: {fileID: %d}\n  m_Father: {fileID: 0}\n", goID))
+	}
+	return b.String()
+}
+
 func TestObjectMatchesScriptableAssetComponent(t *testing.T) {
 	asset, err := unityasset.ParseAsset([]byte(`%YAML 1.1
 --- !u!114 &11400000
@@ -139,6 +187,33 @@ MonoBehaviour:
 
 	matches := objectMatches(asset, searchOptions{name: "Character", component: "SO_CharacterConfig"})
 	if len(matches) != 1 {
+		t.Fatalf("matches=%#v", matches)
+	}
+}
+
+func TestRunSearchSkipsStructuredParseOnFileNameHit(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(assets, "Target.prefab"), []byte("not unity yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	project, err := unityasset.OpenProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := unityasset.Scan(project, "Assets", unityasset.ScanOptions{Kinds: unityasset.ParseKindSet("prefab")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, warnings := runSearch(project, result.Files, unityasset.ScriptIndex{}, searchOptions{name: "Target"})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings=%#v", warnings)
+	}
+	if len(matches) != 1 || !matches[0].FileNameHit || len(matches[0].Objects) != 0 {
 		t.Fatalf("matches=%#v", matches)
 	}
 }

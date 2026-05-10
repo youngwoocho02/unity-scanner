@@ -195,6 +195,8 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 	}
 	if opts.name != "" && opts.component == "" && containsFold(file.Name, opts.name) {
 		result.Match.FileNameHit = true
+		result.Matched = true
+		return result
 	}
 
 	needsStructured := opts.name != "" || opts.component != ""
