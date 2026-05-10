@@ -207,6 +207,20 @@ func (a *Asset) ScriptGUIDs() map[string]bool {
 	return guids
 }
 
+func AddFieldGUIDs(guids map[string]bool, obj *Object) {
+	if obj == nil {
+		return
+	}
+	for _, line := range obj.Lines {
+		if !strings.Contains(line, "guid:") || strings.Contains(line, "m_Script") {
+			continue
+		}
+		for _, guid := range findGUIDs(line) {
+			guids[guid] = true
+		}
+	}
+}
+
 func (a *Asset) ComponentsFor(goID string) []Component {
 	goObj := a.ByID[goID]
 	if goObj == nil {
@@ -491,7 +505,14 @@ func containsLower(value, lowerNeedle string) bool {
 }
 
 func BuildGUIDIndex(p Project) (GUIDIndex, error) {
+	return BuildGUIDIndexForGUIDs(p, nil)
+}
+
+func BuildGUIDIndexForGUIDs(p Project, wanted map[string]bool) (GUIDIndex, error) {
 	index := GUIDIndex{}
+	if wanted != nil && len(wanted) == 0 {
+		return index, nil
+	}
 	err := filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -509,8 +530,15 @@ func BuildGUIDIndex(p Project) (GUIDIndex, error) {
 		if guid == "" {
 			return nil
 		}
+		guid = strings.ToLower(guid)
+		if wanted != nil && !wanted[guid] {
+			return nil
+		}
 		assetPath := strings.TrimSuffix(path, ".meta")
-		index[strings.ToLower(guid)] = p.AssetPath(assetPath)
+		index[guid] = p.AssetPath(assetPath)
+		if wanted != nil && len(index) == len(wanted) {
+			return filepath.SkipAll
+		}
 		return nil
 	})
 	return index, err

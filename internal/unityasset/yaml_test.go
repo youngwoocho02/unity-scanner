@@ -110,6 +110,19 @@ func TestResolveReferences(t *testing.T) {
 	}
 }
 
+func TestAddFieldGUIDsSkipsScriptGUID(t *testing.T) {
+	obj := &Object{Lines: []string{
+		"  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}",
+		"  icon: {fileID: 1, guid: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB, type: 3}",
+	}}
+	guids := map[string]bool{}
+
+	AddFieldGUIDs(guids, obj)
+	if len(guids) != 1 || !guids["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] {
+		t.Fatalf("guids=%#v", guids)
+	}
+}
+
 func TestFieldsWithHidden(t *testing.T) {
 	asset := &Asset{}
 	obj := &Object{Lines: []string{
@@ -229,6 +242,32 @@ func TestBuildScriptIndexForQueryOnlyReadsMatchingScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(index) != 1 || index["abcdef123456"] != "Assets/Scripts/TargetStation.cs" {
+		t.Fatalf("index=%#v", index)
+	}
+}
+
+func TestBuildGUIDIndexForGUIDs(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets", "Data")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(assets, "Target.asset.meta"), []byte("guid: abcdef123456\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(assets, "Other.asset.meta"), []byte("guid: fedcba654321\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := OpenProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	index, err := BuildGUIDIndexForGUIDs(project, map[string]bool{"abcdef123456": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index) != 1 || index["abcdef123456"] != "Assets/Data/Target.asset" {
 		t.Fatalf("index=%#v", index)
 	}
 }

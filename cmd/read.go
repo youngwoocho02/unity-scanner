@@ -78,8 +78,8 @@ func readCmd(args []string) error {
 		return err
 	}
 	asset.ScriptIndex = scripts
-	if shouldResolveFieldReferences(asset, opts) {
-		guidIndex, err := unityasset.BuildGUIDIndex(project)
+	if fieldGUIDs := fieldReferenceGUIDs(asset, opts); len(fieldGUIDs) > 0 {
+		guidIndex, err := unityasset.BuildGUIDIndexForGUIDs(project, fieldGUIDs)
 		if err != nil {
 			return err
 		}
@@ -89,24 +89,32 @@ func readCmd(args []string) error {
 	return nil
 }
 
-func shouldResolveFieldReferences(asset *unityasset.Asset, opts readOptions) bool {
+func fieldReferenceGUIDs(asset *unityasset.Asset, opts readOptions) map[string]bool {
+	guids := map[string]bool{}
 	if asset.Kind == "asset" {
-		return objectsHaveFieldGUID(asset.Objects)
+		addObjectFieldGUIDs(guids, asset.Objects)
+		return guids
 	}
 	if opts.component == "" {
-		return false
+		return guids
 	}
 	for _, node := range asset.FlattenNodes() {
 		if opts.path != "" && !containsFold(node.Path, opts.path) {
 			continue
 		}
 		for _, component := range asset.ComponentsFor(node.GameObject.ID) {
-			if containsFold(component.Name, opts.component) && objectHasFieldGUID(component.Object) {
-				return true
+			if containsFold(component.Name, opts.component) {
+				unityasset.AddFieldGUIDs(guids, component.Object)
 			}
 		}
 	}
-	return false
+	return guids
+}
+
+func addObjectFieldGUIDs(guids map[string]bool, objects []*unityasset.Object) {
+	for _, obj := range objects {
+		unityasset.AddFieldGUIDs(guids, obj)
+	}
 }
 
 func printRead(asset *unityasset.Asset, opts readOptions) {
@@ -498,27 +506,6 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, opts 
 	if hidden > 0 {
 		fmt.Printf("more components: %d hidden by --limit\n", hidden)
 	}
-}
-
-func objectsHaveFieldGUID(objects []*unityasset.Object) bool {
-	for _, obj := range objects {
-		if objectHasFieldGUID(obj) {
-			return true
-		}
-	}
-	return false
-}
-
-func objectHasFieldGUID(obj *unityasset.Object) bool {
-	if obj == nil {
-		return false
-	}
-	for _, line := range obj.Lines {
-		if strings.Contains(line, "guid:") && !strings.Contains(line, "m_Script") {
-			return true
-		}
-	}
-	return false
 }
 
 func displayObjectName(obj *unityasset.Object) string {
