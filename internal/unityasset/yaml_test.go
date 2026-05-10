@@ -1,8 +1,11 @@
 package unityasset
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -167,4 +170,100 @@ func TestBuildScriptIndexForGUIDs(t *testing.T) {
 	if len(index) != 1 || index["abcdef123456"] != "Assets/Scripts/Foo.cs" {
 		t.Fatalf("index=%#v", index)
 	}
+}
+
+func BenchmarkParseAssetLargePrefab(b *testing.B) {
+	data := []byte(largePrefabYAML(1000))
+
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		asset, err := ParseAsset(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(asset.Objects) != 2000 {
+			b.Fatalf("objects=%d", len(asset.Objects))
+		}
+	}
+}
+
+func BenchmarkBuildScriptIndex(b *testing.B) {
+	project := benchmarkScriptProject(b, 1000)
+
+	b.Run("all", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			index, err := BuildScriptIndex(project)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(index) != 1000 {
+				b.Fatalf("index=%d", len(index))
+			}
+		}
+	})
+
+	b.Run("targeted", func(b *testing.B) {
+		wanted := map[string]bool{"00000000000000000000000000000000": true}
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			index, err := BuildScriptIndexForGUIDs(project, wanted)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(index) != 1 {
+				b.Fatalf("index=%d", len(index))
+			}
+		}
+	})
+}
+
+func largePrefabYAML(count int) string {
+	var b strings.Builder
+	b.WriteString("%YAML 1.1\n")
+	for i := 0; i < count; i++ {
+		goID := 100000 + i
+		transformID := 200000 + i
+		parentID := 0
+		if i > 0 {
+			parentID = 200000 + i - 1
+		}
+		b.WriteString("--- !u!1 &")
+		b.WriteString(strconv.Itoa(goID))
+		b.WriteString("\nGameObject:\n  m_Component:\n  - component: {fileID: ")
+		b.WriteString(strconv.Itoa(transformID))
+		b.WriteString("}\n  m_Name: Node_")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString("\n--- !u!4 &")
+		b.WriteString(strconv.Itoa(transformID))
+		b.WriteString("\nTransform:\n  m_GameObject: {fileID: ")
+		b.WriteString(strconv.Itoa(goID))
+		b.WriteString("}\n  m_Father: {fileID: ")
+		b.WriteString(strconv.Itoa(parentID))
+		b.WriteString("}\n")
+	}
+	return b.String()
+}
+
+func benchmarkScriptProject(b *testing.B, count int) Project {
+	b.Helper()
+	dir := b.TempDir()
+	scripts := filepath.Join(dir, "Assets", "Scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		b.Fatal(err)
+	}
+	for i := 0; i < count; i++ {
+		guid := fmt.Sprintf("%032x", i)
+		path := filepath.Join(scripts, fmt.Sprintf("Script_%04d.cs.meta", i))
+		if err := os.WriteFile(path, []byte("guid: "+guid+"\n"), 0o644); err != nil {
+			b.Fatal(err)
+		}
+	}
+	project, err := OpenProject(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return project
 }
