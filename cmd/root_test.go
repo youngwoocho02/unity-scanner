@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -24,7 +25,7 @@ func TestReorderFlagArgsAllowsFlagsAfterPath(t *testing.T) {
 	}
 }
 
-func TestNormalCommandsDoNotWriteUpdateCache(t *testing.T) {
+func TestScanCommandsDoNotWriteUpdateCache(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -41,15 +42,36 @@ func TestNormalCommandsDoNotWriteUpdateCache(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(assets, "Foo.prefab"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	var buf bytes.Buffer
-	restoreStdout := captureStdout(&buf)
-	err := Execute([]string{"list", "-p", project, "--flat", "--limit", "1", "Assets"})
-	restoreStdout()
-	if err != nil {
+	if err := os.WriteFile(filepath.Join(assets, "Config.asset.meta"), []byte("guid: abcdef1234567890abcdef1234567890\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".unity-scanner")); !os.IsNotExist(err) {
-		t.Fatalf("expected no update cache directory, stat err=%v", err)
+	if err := os.WriteFile(filepath.Join(assets, "Config.asset"), []byte(`%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Name: Config
+  ref: {fileID: 1, guid: abcdef1234567890abcdef1234567890, type: 2}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	commands := [][]string{
+		{"list", "-p", project, "--flat", "--limit", "1", "Assets"},
+		{"read", "-p", project, "Assets/Config.asset", "--field-limit", "1"},
+		{"search", "-p", project, "--name", "Config", "--type", "asset", "--limit", "1", "Assets"},
+		{"refs", "-p", project, "Assets/Config.asset", "Assets", "--limit", "1"},
+	}
+	for _, args := range commands {
+		t.Run(args[0], func(t *testing.T) {
+			var buf bytes.Buffer
+			restoreStdout := captureStdout(&buf)
+			err := Execute(args)
+			restoreStdout()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Join(home, ".unity-scanner")); !os.IsNotExist(err) {
+				t.Fatalf("expected no update cache directory after %s, stat err=%v", fmt.Sprint(args), err)
+			}
+		})
 	}
 }
