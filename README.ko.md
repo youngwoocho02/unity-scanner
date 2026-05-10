@@ -46,30 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/
 irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
 ```
 
-### Go install
-
-```bash
-go install github.com/youngwoocho02/unity-scanner@latest
-```
-
-### 직접 다운로드
-
-```bash
-curl -fsSL https://github.com/youngwoocho02/unity-scanner/releases/latest/download/unity-scanner-linux-amd64 -o unity-scanner
-chmod +x unity-scanner
-```
-
-### 소스에서 빌드
-
-```bash
-go build -o unity-scanner .
-```
-
-레포 루트에서 실행하거나 바이너리를 `PATH`에 넣으면 된다.
-
-```bash
-./unity-scanner list -p /projects/SampleProject Assets
-```
+설치 스크립트는 최신 릴리스 바이너리를 받고 설치 디렉터리를 `PATH`에 추가한다.
 
 ### 업데이트
 

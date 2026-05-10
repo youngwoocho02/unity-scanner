@@ -46,30 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/
 irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
 ```
 
-### Go install
-
-```bash
-go install github.com/youngwoocho02/unity-scanner@latest
-```
-
-### 直接 download
-
-```bash
-curl -fsSL https://github.com/youngwoocho02/unity-scanner/releases/latest/download/unity-scanner-linux-amd64 -o unity-scanner
-chmod +x unity-scanner
-```
-
-### source から build
-
-```bash
-go build -o unity-scanner .
-```
-
-リポジトリルートで実行するか、binary を `PATH` に置く。
-
-```bash
-./unity-scanner list -p /projects/SampleProject Assets
-```
+installer は latest release binary を download し、install directory を `PATH` に追加する。
 
 ### update
 

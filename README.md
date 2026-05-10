@@ -46,30 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/
 irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
 ```
 
-### Go install
-
-```bash
-go install github.com/youngwoocho02/unity-scanner@latest
-```
-
-### Manual download
-
-```bash
-curl -fsSL https://github.com/youngwoocho02/unity-scanner/releases/latest/download/unity-scanner-linux-amd64 -o unity-scanner
-chmod +x unity-scanner
-```
-
-### Build from source
-
-```bash
-go build -o unity-scanner .
-```
-
-Run from the repository root, or place the binary on `PATH`.
-
-```bash
-./unity-scanner list -p /projects/SampleProject Assets
-```
+The installer downloads the latest release binary and adds the install directory to `PATH`.
 
 ### Update
 
