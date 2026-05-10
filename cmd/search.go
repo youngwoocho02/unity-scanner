@@ -209,7 +209,7 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 
 	needsStructured := opts.name != "" || opts.component != ""
 	if needsStructured && unityasset.KnownUnityYAMLKind(file.Kind) {
-		asset, err := unityasset.ReadAssetSummary(project, file, scripts)
+		asset, err := unityasset.ReadAssetSummary(file, scripts)
 		if err == nil {
 			result.Match.Objects = objectMatches(asset, opts)
 		} else {

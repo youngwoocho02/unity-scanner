@@ -94,19 +94,19 @@ type ParseOptions struct {
 	KeepLines bool
 }
 
-func ReadAsset(p Project, entry FileEntry, scripts ScriptIndex) (*Asset, error) {
-	return readAssetWithOptions(p, entry, scripts, ParseOptions{KeepLines: true}, true)
+func ReadAsset(entry FileEntry, scripts ScriptIndex) (*Asset, error) {
+	return readAssetWithOptions(entry, scripts, ParseOptions{KeepLines: true}, true)
 }
 
-func ReadAssetSummary(p Project, entry FileEntry, scripts ScriptIndex) (*Asset, error) {
-	return readAssetWithOptions(p, entry, scripts, ParseOptions{}, false)
+func ReadAssetSummary(entry FileEntry, scripts ScriptIndex) (*Asset, error) {
+	return readAssetWithOptions(entry, scripts, ParseOptions{}, false)
 }
 
-func ReadAssetWithOptions(p Project, entry FileEntry, scripts ScriptIndex, opts ParseOptions) (*Asset, error) {
-	return readAssetWithOptions(p, entry, scripts, opts, true)
+func ReadAssetWithOptions(entry FileEntry, scripts ScriptIndex, opts ParseOptions) (*Asset, error) {
+	return readAssetWithOptions(entry, scripts, opts, true)
 }
 
-func readAssetWithOptions(p Project, entry FileEntry, scripts ScriptIndex, opts ParseOptions, readMeta bool) (*Asset, error) {
+func readAssetWithOptions(entry FileEntry, scripts ScriptIndex, opts ParseOptions, readMeta bool) (*Asset, error) {
 	data, err := os.ReadFile(entry.Abs)
 	if err != nil {
 		return nil, err

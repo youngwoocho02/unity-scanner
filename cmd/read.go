@@ -69,7 +69,7 @@ func readCmd(args []string) error {
 		return fmt.Errorf("read supports Unity YAML assets, got %s", entry.Kind)
 	}
 
-	asset, err := unityasset.ReadAsset(project, entry, unityasset.ScriptIndex{})
+	asset, err := unityasset.ReadAsset(entry, unityasset.ScriptIndex{})
 	if err != nil {
 		return err
 	}

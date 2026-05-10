@@ -340,17 +340,13 @@ GameObject:
 	if err := os.WriteFile(prefab+".meta", []byte("guid: abcdef123456\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	project, err := OpenProject(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
 	entry := FileEntry{Abs: prefab, AssetPath: "Assets/Foo.prefab", Kind: "prefab"}
 
-	full, err := ReadAsset(project, entry, nil)
+	full, err := ReadAsset(entry, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	summary, err := ReadAssetSummary(project, entry, nil)
+	summary, err := ReadAssetSummary(entry, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
