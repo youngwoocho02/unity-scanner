@@ -251,6 +251,50 @@ Transform:
 	}
 }
 
+func TestReadAssetSummarySkipsMetaGUID(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prefab := filepath.Join(assets, "Foo.prefab")
+	data := []byte(`%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Name: Root
+`)
+	if err := os.WriteFile(prefab, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(prefab+".meta", []byte("guid: abcdef123456\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := OpenProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := FileEntry{Abs: prefab, AssetPath: "Assets/Foo.prefab", Kind: "prefab"}
+
+	full, err := ReadAsset(project, entry, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := ReadAssetSummary(project, entry, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if full.GUID != "abcdef123456" {
+		t.Fatalf("full GUID=%q", full.GUID)
+	}
+	if summary.GUID != "" {
+		t.Fatalf("summary GUID=%q", summary.GUID)
+	}
+	if summary.Path != "Assets/Foo.prefab" || summary.Kind != "prefab" || len(summary.Objects) != 1 {
+		t.Fatalf("summary=%#v", summary)
+	}
+}
+
 func TestExtractUnityYAMLReferences(t *testing.T) {
 	if classID, id, ok := parseHeaderLine([]byte("--- !u!114 &-300")); !ok || classID != 114 || id != "-300" {
 		t.Fatalf("header classID=%d id=%q ok=%v", classID, id, ok)

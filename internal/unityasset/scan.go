@@ -54,7 +54,6 @@ func Scan(p Project, input string, opts ScanOptions) (ScanResult, error) {
 		entry := makeEntry(p, path)
 		if entry.IsMeta {
 			result.MetaCount++
-			result.KindCount["meta"]++
 			if !opts.IncludeMeta {
 				return nil
 			}

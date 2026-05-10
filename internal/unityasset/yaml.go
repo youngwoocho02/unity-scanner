@@ -95,14 +95,18 @@ type ParseOptions struct {
 }
 
 func ReadAsset(p Project, entry FileEntry, scripts ScriptIndex) (*Asset, error) {
-	return ReadAssetWithOptions(p, entry, scripts, ParseOptions{KeepLines: true})
+	return readAssetWithOptions(p, entry, scripts, ParseOptions{KeepLines: true}, true)
 }
 
 func ReadAssetSummary(p Project, entry FileEntry, scripts ScriptIndex) (*Asset, error) {
-	return ReadAssetWithOptions(p, entry, scripts, ParseOptions{})
+	return readAssetWithOptions(p, entry, scripts, ParseOptions{}, false)
 }
 
 func ReadAssetWithOptions(p Project, entry FileEntry, scripts ScriptIndex, opts ParseOptions) (*Asset, error) {
+	return readAssetWithOptions(p, entry, scripts, opts, true)
+}
+
+func readAssetWithOptions(p Project, entry FileEntry, scripts ScriptIndex, opts ParseOptions, readMeta bool) (*Asset, error) {
 	data, err := os.ReadFile(entry.Abs)
 	if err != nil {
 		return nil, err
@@ -113,7 +117,9 @@ func ReadAssetWithOptions(p Project, entry FileEntry, scripts ScriptIndex, opts 
 	}
 	asset.Path = entry.AssetPath
 	asset.Kind = entry.Kind
-	asset.GUID = ReadMetaGUID(entry.Abs + ".meta")
+	if readMeta {
+		asset.GUID = ReadMetaGUID(entry.Abs + ".meta")
+	}
 	asset.ScriptIndex = scripts
 	return asset, nil
 }
@@ -351,15 +357,15 @@ func (a *Asset) FieldsWithHidden(obj *Object, limit int) ([]Field, int) {
 		if skipField(key) {
 			continue
 		}
+		if len(fields) >= limit {
+			hidden++
+			continue
+		}
 		value := strings.TrimSpace(parts[1])
 		if value == "" {
 			value = summarizeNested(obj.Lines, i+1)
 		}
 		value = a.ResolveReferences(value)
-		if len(fields) >= limit {
-			hidden++
-			continue
-		}
 		fields = append(fields, Field{Name: key, Value: value})
 	}
 	return fields, hidden
