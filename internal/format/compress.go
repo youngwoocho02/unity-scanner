@@ -2,13 +2,9 @@ package format
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 )
-
-var trailingNumber = regexp.MustCompile(`^(.*?)(\d+)$`)
 
 type numberName struct {
 	raw    string
@@ -38,21 +34,16 @@ func CompressNames(names []string) []string {
 	numbered := make([]numberName, 0, len(unique))
 	plain := make([]string, 0, len(unique))
 	for _, name := range unique {
-		m := trailingNumber.FindStringSubmatch(name)
-		if m == nil {
-			plain = append(plain, name)
-			continue
-		}
-		n, err := strconv.Atoi(m[2])
-		if err != nil {
+		prefix, num, width, ok := splitTrailingNumber(name)
+		if !ok {
 			plain = append(plain, name)
 			continue
 		}
 		numbered = append(numbered, numberName{
 			raw:    name,
-			prefix: m[1],
-			num:    n,
-			width:  len(m[2]),
+			prefix: prefix,
+			num:    num,
+			width:  width,
 		})
 	}
 
@@ -96,6 +87,28 @@ func CompressNames(names []string) []string {
 
 	sort.Strings(out)
 	return out
+}
+
+func splitTrailingNumber(name string) (string, int, int, bool) {
+	end := len(name)
+	start := end
+	for start > 0 && name[start-1] >= '0' && name[start-1] <= '9' {
+		start--
+	}
+	if start == end {
+		return "", 0, 0, false
+	}
+
+	num := 0
+	maxInt := int(^uint(0) >> 1)
+	for i := start; i < end; i++ {
+		digit := int(name[i] - '0')
+		if num > (maxInt-digit)/10 {
+			return "", 0, 0, false
+		}
+		num = num*10 + digit
+	}
+	return name[:start], num, end - start, true
 }
 
 func Lines(items []string, perLine int) []string {
