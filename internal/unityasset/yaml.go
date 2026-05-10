@@ -416,6 +416,41 @@ func BuildScriptIndex(p Project) (ScriptIndex, error) {
 	return BuildScriptIndexForGUIDs(p, nil)
 }
 
+func BuildScriptIndexForQuery(p Project, query string) (ScriptIndex, error) {
+	index := ScriptIndex{}
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return index, nil
+	}
+	err := filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(d.Name()) && path != p.Assets {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".cs.meta") {
+			return nil
+		}
+		scriptPath := strings.TrimSuffix(path, ".meta")
+		assetPath := p.AssetPath(scriptPath)
+		scriptName := strings.TrimSuffix(filepath.Base(scriptPath), filepath.Ext(scriptPath))
+		if !containsLower(assetPath, query) && !containsLower(scriptName, query) {
+			return nil
+		}
+		guid := ReadMetaGUID(path)
+		if guid == "" {
+			return nil
+		}
+		index[strings.ToLower(guid)] = assetPath
+		return nil
+	})
+	return index, err
+}
+
 func BuildScriptIndexForGUIDs(p Project, wanted map[string]bool) (ScriptIndex, error) {
 	index := ScriptIndex{}
 	if wanted != nil && len(wanted) == 0 {
@@ -449,6 +484,10 @@ func BuildScriptIndexForGUIDs(p Project, wanted map[string]bool) (ScriptIndex, e
 		return nil
 	})
 	return index, err
+}
+
+func containsLower(value, lowerNeedle string) bool {
+	return strings.Contains(strings.ToLower(value), lowerNeedle)
 }
 
 func BuildGUIDIndex(p Project) (GUIDIndex, error) {

@@ -191,3 +191,58 @@ Transform:
 		}
 	}
 }
+
+func TestRunSearchScopedComponentDoesNotMatchMissingMonoBehaviourFallback(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	scripts := filepath.Join(assets, "Scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "TargetStation.cs.meta"), []byte("guid: abcdef123456\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "Other.cs.meta"), []byte("guid: fedcba654321\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prefab := filepath.Join(assets, "Item.prefab")
+	if err := os.WriteFile(prefab, []byte(`%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: 300}
+  m_Name: Item
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: fedcba654321, type: 3}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	project, err := unityasset.OpenProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := unityasset.Scan(project, "Assets", unityasset.ScanOptions{Kinds: unityasset.ParseKindSet("prefab")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptsIndex, err := unityasset.BuildScriptIndexForQuery(project, "TargetStation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, _ := runSearch(project, result.Files, scriptsIndex, searchOptions{component: "TargetStation", scriptScoped: true})
+	if len(matches) != 0 {
+		t.Fatalf("matches=%#v", matches)
+	}
+	matches, _ = runSearch(project, result.Files, unityasset.ScriptIndex{}, searchOptions{component: "MonoBehaviour", scriptScoped: true})
+	if len(matches) != 0 {
+		t.Fatalf("fallback matches=%#v", matches)
+	}
+}

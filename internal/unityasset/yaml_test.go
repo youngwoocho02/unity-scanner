@@ -207,6 +207,32 @@ func TestBuildScriptIndexForGUIDs(t *testing.T) {
 	}
 }
 
+func TestBuildScriptIndexForQueryOnlyReadsMatchingScripts(t *testing.T) {
+	dir := t.TempDir()
+	scripts := filepath.Join(dir, "Assets", "Scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "TargetStation.cs.meta"), []byte("guid: abcdef123456\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "Other.cs.meta"), []byte("guid: fedcba654321\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := OpenProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	index, err := BuildScriptIndexForQuery(project, "station")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index) != 1 || index["abcdef123456"] != "Assets/Scripts/TargetStation.cs" {
+		t.Fatalf("index=%#v", index)
+	}
+}
+
 func BenchmarkParseAssetLargePrefab(b *testing.B) {
 	data := []byte(largePrefabYAML(1000))
 
@@ -262,6 +288,19 @@ func BenchmarkBuildScriptIndex(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			index, err := BuildScriptIndexForGUIDs(project, wanted)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(index) != 1 {
+				b.Fatalf("index=%d", len(index))
+			}
+		}
+	})
+
+	b.Run("query", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			index, err := BuildScriptIndexForQuery(project, "Script_0000")
 			if err != nil {
 				b.Fatal(err)
 			}

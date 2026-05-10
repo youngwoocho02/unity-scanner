@@ -17,14 +17,15 @@ import (
 
 type searchOptions struct {
 	commonOptions
-	name      string
-	component string
-	guid      string
-	ref       string
-	types     string
-	compact   bool
-	limit     int
-	rootPath  string
+	name         string
+	component    string
+	guid         string
+	ref          string
+	types        string
+	compact      bool
+	limit        int
+	rootPath     string
+	scriptScoped bool
 }
 
 type searchMatch struct {
@@ -98,10 +99,11 @@ func searchCmd(args []string) error {
 
 	scripts := unityasset.ScriptIndex{}
 	if opts.component != "" {
-		scripts, err = unityasset.BuildScriptIndex(project)
+		scripts, err = unityasset.BuildScriptIndexForQuery(project, opts.component)
 		if err != nil {
 			return err
 		}
+		opts.scriptScoped = true
 	}
 
 	_, opts.rootPath, _ = project.Resolve(target)
@@ -216,7 +218,7 @@ func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
 		componentOK := opts.component == ""
 		for _, component := range components {
 			componentNames = append(componentNames, component.Name)
-			if containsFold(component.Name, opts.component) {
+			if componentMatches(component, opts) {
 				componentOK = true
 			}
 		}
@@ -228,7 +230,7 @@ func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
 		for _, obj := range asset.Objects {
 			name, scriptPath := asset.ComponentName(obj)
 			nameOK := opts.name == "" || containsFold(obj.Name, opts.name) || containsFold(name, opts.name) || containsFold(scriptPath, opts.name)
-			componentOK := opts.component == "" || containsFold(name, opts.component) || containsFold(scriptPath, opts.component)
+			componentOK := opts.component == "" || componentObjectMatches(obj, name, scriptPath, opts)
 			if nameOK && componentOK {
 				label := obj.Name
 				if label == "" {
@@ -239,6 +241,20 @@ func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
 		}
 	}
 	return out
+}
+
+func componentMatches(component unityasset.Component, opts searchOptions) bool {
+	return componentObjectMatches(component.Object, component.Name, component.ScriptPath, opts)
+}
+
+func componentObjectMatches(obj *unityasset.Object, name, scriptPath string, opts searchOptions) bool {
+	if opts.component == "" {
+		return true
+	}
+	if opts.scriptScoped && obj != nil && obj.Type == "MonoBehaviour" && obj.ScriptGUID != "" && scriptPath == "" {
+		return false
+	}
+	return containsFold(name, opts.component) || containsFold(scriptPath, opts.component)
 }
 
 func printSearch(matches []searchMatch, kindCounts map[string]int, opts searchOptions, warnings []searchWarning) {
