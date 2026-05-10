@@ -244,7 +244,13 @@ func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
 }
 
 func componentMatches(component unityasset.Component, opts searchOptions) bool {
-	return componentObjectMatches(component.Object, component.Name, component.ScriptPath, opts)
+	if opts.component == "" {
+		return true
+	}
+	if opts.scriptScoped && component.Object != nil && component.Object.Type == "MonoBehaviour" && component.Object.ScriptGUID != "" && component.ScriptPath == "" {
+		return false
+	}
+	return containsFold(component.Name, opts.component)
 }
 
 func componentObjectMatches(obj *unityasset.Object, name, scriptPath string, opts searchOptions) bool {

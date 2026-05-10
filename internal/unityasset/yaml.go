@@ -452,7 +452,7 @@ func BuildScriptIndexForQuery(p Project, query string) (ScriptIndex, error) {
 		scriptPath := strings.TrimSuffix(path, ".meta")
 		assetPath := p.AssetPath(scriptPath)
 		scriptName := strings.TrimSuffix(filepath.Base(scriptPath), filepath.Ext(scriptPath))
-		if !containsLower(assetPath, query) && !containsLower(scriptName, query) {
+		if !containsLower(scriptName, query) {
 			return nil
 		}
 		guid := ReadMetaGUID(path)

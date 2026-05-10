@@ -232,6 +232,13 @@ func TestBuildScriptIndexForQueryOnlyReadsMatchingScripts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(scripts, "Other.cs.meta"), []byte("guid: fedcba654321\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	stationDir := filepath.Join(dir, "Assets", "OfficeAndPoliceStation", "Scripts")
+	if err := os.MkdirAll(stationDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stationDir, "LightOptimize.cs.meta"), []byte("guid: 111111111111\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	project, err := OpenProject(dir)
 	if err != nil {
 		t.Fatal(err)
