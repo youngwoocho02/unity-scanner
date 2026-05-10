@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -37,5 +38,27 @@ func TestPrintListUsesRootRelativeGroupsAndOneExtBlock(t *testing.T) {
 	}
 	if strings.Contains(out, ".prefab\n    A_01") {
 		t.Fatalf("extension leaked into names:\n%s", out)
+	}
+}
+
+func BenchmarkGroupEntriesManyGroups(b *testing.B) {
+	files := make([]unityasset.FileEntry, 0, 1000*20)
+	for group := 0; group < 1000; group++ {
+		dir := fmt.Sprintf("Assets/Folder_%04d", group)
+		for name := 0; name < 20; name++ {
+			files = append(files, unityasset.FileEntry{
+				Dir:  dir,
+				Kind: "prefab",
+				Name: fmt.Sprintf("Item_%04d", name),
+			})
+		}
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		groups := groupEntries(files)
+		if len(groups) != 1000 {
+			b.Fatalf("groups=%d", len(groups))
+		}
 	}
 }

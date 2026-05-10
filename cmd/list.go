@@ -181,7 +181,6 @@ func groupEntries(files []unityasset.FileEntry) []entryGroup {
 
 	groups := make([]entryGroup, 0, len(byKey))
 	for _, group := range byKey {
-		group.Names = format.CompressNames(group.Names)
 		groups = append(groups, *group)
 	}
 	sort.Slice(groups, func(i, j int) bool {
@@ -205,8 +204,9 @@ func printGroups(groups []entryGroup, rootPath string, limit int) {
 	fmt.Println("GROUPS")
 	for i := 0; i < limit; i++ {
 		group := groups[i]
+		names := format.CompressNames(group.Names)
 		fmt.Printf("  %s  [%s]\n", compactGroupDir(group.Dir, rootPath), group.Kind)
-		for _, line := range format.Lines(group.Names, 6) {
+		for _, line := range format.Lines(names, 6) {
 			fmt.Printf("    %s\n", line)
 		}
 	}
