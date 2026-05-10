@@ -34,6 +34,33 @@ Token counts in examples below are approximate. They use `chars / 4` because exa
 
 ## Install
 
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.sh | sh
+```
+
+### Windows PowerShell
+
+```powershell
+irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
+```
+
+### Go install
+
+```bash
+go install github.com/youngwoocho02/unity-scanner@latest
+```
+
+### Manual download
+
+```bash
+curl -fsSL https://github.com/youngwoocho02/unity-scanner/releases/latest/download/unity-scanner-linux-amd64 -o unity-scanner
+chmod +x unity-scanner
+```
+
+### Build from source
+
 ```bash
 go build -o unity-scanner .
 ```
@@ -44,6 +71,15 @@ Run from the repository root, or place the binary on `PATH`.
 ./unity-scanner list -p /projects/SampleProject Assets
 ```
 
+### Update
+
+```bash
+unity-scanner update
+unity-scanner update --check
+```
+
+Installed release builds also print a cached update notice during normal commands when a newer GitHub release is available.
+
 ## Commands
 
 ```bash
@@ -51,6 +87,7 @@ unity-scanner list   -p <project> [path]
 unity-scanner read   -p <project> <asset>
 unity-scanner search -p <project> [path] [filters]
 unity-scanner refs   -p <project> <asset-or-guid> [scan-path]
+unity-scanner update [--check]
 ```
 
 Common option:
@@ -385,6 +422,12 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --type <list>        prefab,scene,asset,mat,controller
 --detail             print detailed matches instead of compact groups
 --limit <n>          max result files, default 80
+```
+
+### update
+
+```text
+--check              check for updates without installing
 ```
 
 ## Design Choices

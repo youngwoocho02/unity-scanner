@@ -28,17 +28,26 @@ func Execute(args []string) error {
 	case "version", "--version", "-v":
 		fmt.Fprintf(os.Stdout, "unity-scanner %s\n", Version)
 		return nil
+	case "update":
+		return updateCmd(args[1:])
 	case "list", "ls":
-		return listCmd(args[1:])
+		return runWithUpdateNotice(listCmd(args[1:]))
 	case "read", "cat":
-		return readCmd(args[1:])
+		return runWithUpdateNotice(readCmd(args[1:]))
 	case "search", "find":
-		return searchCmd(args[1:])
+		return runWithUpdateNotice(searchCmd(args[1:]))
 	case "refs":
-		return refsCmd(args[1:])
+		return runWithUpdateNotice(refsCmd(args[1:]))
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func runWithUpdateNotice(err error) error {
+	if err == nil {
+		printUpdateNotice()
+	}
+	return err
 }
 
 type commonOptions struct {
@@ -128,6 +137,7 @@ Commands:
   read     readable summary for .prefab/.unity/.asset YAML
   search   structured name/component/guid search
   refs     find Unity YAML references to an asset GUID
+  update   update to the latest GitHub release
 
 Common:
   -p, --project <path>   Unity project path
@@ -137,6 +147,7 @@ Examples:
   unity-scanner read -p . Assets/Scenes/Main.unity --component GameManager
   unity-scanner search -p . --name Station --type prefab,scene
   unity-scanner refs -p . Assets/Scripts/Foo.cs
+  unity-scanner update --check
 `)
 }
 
@@ -186,6 +197,19 @@ Options:
   --type <list>        prefab,scene,asset,mat,controller
   --detail             print detailed matches instead of compact groups
   --limit <n>          max result files, default 80
+`)
+	case "update":
+		fmt.Fprint(w, `Usage:
+  unity-scanner update [options]
+
+Update the CLI binary to the latest release from GitHub.
+
+Options:
+  --check              Check for updates without installing
+
+Examples:
+  unity-scanner update
+  unity-scanner update --check
 `)
 	default:
 		printHelp(w)

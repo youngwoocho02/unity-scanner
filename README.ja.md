@@ -34,6 +34,33 @@
 
 ## インストール
 
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.sh | sh
+```
+
+### Windows PowerShell
+
+```powershell
+irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
+```
+
+### Go install
+
+```bash
+go install github.com/youngwoocho02/unity-scanner@latest
+```
+
+### 直接 download
+
+```bash
+curl -fsSL https://github.com/youngwoocho02/unity-scanner/releases/latest/download/unity-scanner-linux-amd64 -o unity-scanner
+chmod +x unity-scanner
+```
+
+### source から build
+
 ```bash
 go build -o unity-scanner .
 ```
@@ -44,6 +71,15 @@ go build -o unity-scanner .
 ./unity-scanner list -p /projects/SampleProject Assets
 ```
 
+### update
+
+```bash
+unity-scanner update
+unity-scanner update --check
+```
+
+release build で入れた場合、新しい GitHub release があれば通常 command 実行時にも cache 済みの update notice を出す。
+
 ## コマンド
 
 ```bash
@@ -51,6 +87,7 @@ unity-scanner list   -p <project> [path]
 unity-scanner read   -p <project> <asset>
 unity-scanner search -p <project> [path] [filters]
 unity-scanner refs   -p <project> <asset-or-guid> [scan-path]
+unity-scanner update [--check]
 ```
 
 共通 option:
@@ -385,6 +422,12 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 --type <list>        prefab,scene,asset,mat,controller
 --detail             print detailed matches instead of compact groups
 --limit <n>          max result files, default 80
+```
+
+### update
+
+```text
+--check              install せず update だけ確認
 ```
 
 ## 設計上の選択

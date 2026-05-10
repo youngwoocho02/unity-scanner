@@ -34,6 +34,33 @@
 
 ## 설치
 
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.sh | sh
+```
+
+### Windows PowerShell
+
+```powershell
+irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install.ps1 | iex
+```
+
+### Go install
+
+```bash
+go install github.com/youngwoocho02/unity-scanner@latest
+```
+
+### 직접 다운로드
+
+```bash
+curl -fsSL https://github.com/youngwoocho02/unity-scanner/releases/latest/download/unity-scanner-linux-amd64 -o unity-scanner
+chmod +x unity-scanner
+```
+
+### 소스에서 빌드
+
 ```bash
 go build -o unity-scanner .
 ```
@@ -44,6 +71,15 @@ go build -o unity-scanner .
 ./unity-scanner list -p /projects/SampleProject Assets
 ```
 
+### 업데이트
+
+```bash
+unity-scanner update
+unity-scanner update --check
+```
+
+릴리스 빌드로 설치한 경우 새 GitHub 릴리스가 있으면 일반 명령 실행 중에도 캐시된 업데이트 안내를 출력한다.
+
 ## 명령
 
 ```bash
@@ -51,6 +87,7 @@ unity-scanner list   -p <project> [path]
 unity-scanner read   -p <project> <asset>
 unity-scanner search -p <project> [path] [filters]
 unity-scanner refs   -p <project> <asset-or-guid> [scan-path]
+unity-scanner update [--check]
 ```
 
 공통 옵션:
@@ -385,6 +422,12 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --type <list>        prefab,scene,asset,mat,controller
 --detail             print detailed matches instead of compact groups
 --limit <n>          max result files, default 80
+```
+
+### update
+
+```text
+--check              설치하지 않고 업데이트만 확인
 ```
 
 ## 설계 선택
