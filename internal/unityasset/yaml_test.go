@@ -272,6 +272,56 @@ Transform:
 	}
 }
 
+func TestParseAssetSummaryMatchesFullParseStructureVariants(t *testing.T) {
+	data := []byte(`%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: -300}
+  m_Name: ""
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: -400}
+--- !u!224 &-400
+RectTransform:
+  m_GameObject: {fileID: 101}
+  m_Father: {fileID: 0}
+--- !u!114 &-300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: FEDCBA654321FEDCBA654321FEDCBA65, type: 3}
+--- !u!1 &101
+GameObject:
+  m_Component:
+  - component: {fileID: -400}
+  m_Name: "UI Root"
+`)
+	full, err := ParseAsset(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := ParseAssetSummary(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(full.Objects) != len(summary.Objects) {
+		t.Fatalf("objects full=%d summary=%d", len(full.Objects), len(summary.Objects))
+	}
+	for i := range full.Objects {
+		f := full.Objects[i]
+		s := summary.Objects[i]
+		if f.ID != s.ID || f.ClassID != s.ClassID || f.Type != s.Type ||
+			f.Name != s.Name || f.GameObjectID != s.GameObjectID ||
+			f.FatherTransformID != s.FatherTransformID || f.ScriptGUID != s.ScriptGUID ||
+			!reflect.DeepEqual(f.ComponentIDs, s.ComponentIDs) {
+			t.Fatalf("object %d differs\nfull=%#v\nsummary=%#v", i, f, s)
+		}
+	}
+}
+
 func TestReadAssetSummarySkipsMetaGUID(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")

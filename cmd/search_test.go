@@ -410,6 +410,40 @@ MonoBehaviour:
 	}
 }
 
+func TestSearchCmdScopedComponentDoesNotUseScriptPathAsComponentName(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "OfficeAndPoliceStation", "Scripts", "LightOptimize.cs.meta"), "guid: fedcba654321fedcba654321fedcba65\n")
+	writeTestFile(t, filepath.Join(assets, "FalsePositive.prefab"), `%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: 300}
+  m_Name: FalsePositive
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: fedcba654321fedcba654321fedcba65, type: 3}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := searchCmd([]string{"-p", dir, "--component", "Station", "--type", "prefab", "--limit", "20", "Assets"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "MATCHES  0") {
+		t.Fatalf("unexpected path-based component match:\n%s", out)
+	}
+}
+
 func TestSearchCmdMatchesScriptComponentWithoutPathFalsePositive(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")
