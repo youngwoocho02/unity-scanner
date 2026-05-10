@@ -136,8 +136,9 @@ func runSearch(project unityasset.Project, files []unityasset.FileEntry, scripts
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			guidSearcher := makeTextSearcher(opts.guid)
 			for index := range jobs {
-				results <- searchOneFile(project, index, files[index], scripts, opts)
+				results <- searchOneFile(project, index, files[index], scripts, opts, &guidSearcher)
 			}
 		}()
 	}
@@ -168,8 +169,9 @@ func runSearch(project unityasset.Project, files []unityasset.FileEntry, scripts
 func runSearchSerial(project unityasset.Project, files []unityasset.FileEntry, scripts unityasset.ScriptIndex, opts searchOptions) ([]searchMatch, []searchWarning) {
 	matches := make([]searchMatch, 0)
 	warnings := make([]searchWarning, 0)
+	guidSearcher := makeTextSearcher(opts.guid)
 	for i, file := range files {
-		result := searchOneFile(project, i, file, scripts, opts)
+		result := searchOneFile(project, i, file, scripts, opts, &guidSearcher)
 		warnings = append(warnings, result.Warnings...)
 		if result.Matched {
 			matches = append(matches, result.Match)
@@ -178,14 +180,14 @@ func runSearchSerial(project unityasset.Project, files []unityasset.FileEntry, s
 	return matches, warnings
 }
 
-func searchOneFile(project unityasset.Project, index int, file unityasset.FileEntry, scripts unityasset.ScriptIndex, opts searchOptions) searchFileResult {
+func searchOneFile(project unityasset.Project, index int, file unityasset.FileEntry, scripts unityasset.ScriptIndex, opts searchOptions, guidSearcher *textSearcher) searchFileResult {
 	result := searchFileResult{Index: index, Match: searchMatch{File: file}}
 	if file.IsMeta {
 		return result
 	}
 
 	if opts.guid != "" {
-		ok, err := fileContains(file, opts.guid)
+		ok, err := guidSearcher.contains(file)
 		if err != nil {
 			result.Warnings = append(result.Warnings, searchWarning{Path: file.AssetPath, Err: err})
 		}
@@ -394,6 +396,22 @@ func printSearchWarnings(warnings []searchWarning) {
 }
 
 func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
+	searcher := makeTextSearcher(needle)
+	return searcher.contains(file)
+}
+
+type textSearcher struct {
+	needle []byte
+	buf    []byte
+	tail   []byte
+	bridge []byte
+}
+
+func makeTextSearcher(needle string) textSearcher {
+	return textSearcher{needle: []byte(needle)}
+}
+
+func (s *textSearcher) contains(file unityasset.FileEntry) (bool, error) {
 	if !isTextSearchKind(file.Kind) {
 		return false, nil
 	}
@@ -403,15 +421,14 @@ func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
 	}
 	defer f.Close()
 
-	needleBytes := []byte(needle)
-	if len(needleBytes) == 0 {
+	if len(s.needle) == 0 {
 		return true, nil
 	}
 
-	overlap := len(needleBytes) - 1
-	buf := make([]byte, textSearchBufferSize(f))
-	tail := make([]byte, 0, overlap)
-	bridge := make([]byte, 0, overlap*2)
+	overlap := len(s.needle) - 1
+	buf := s.buffer(textSearchBufferSize(f))
+	tail := s.tailBuffer(overlap)
+	bridge := s.bridgeBuffer(overlap * 2)
 	for {
 		n, readErr := f.Read(buf)
 		if n > 0 {
@@ -423,11 +440,11 @@ func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
 					take = len(chunk)
 				}
 				bridge = append(bridge, chunk[:take]...)
-				if bytes.Contains(bridge, needleBytes) {
+				if bytes.Contains(bridge, s.needle) {
 					return true, nil
 				}
 			}
-			if bytes.Contains(chunk, needleBytes) {
+			if bytes.Contains(chunk, s.needle) {
 				return true, nil
 			}
 			tail = updateSearchTail(tail, chunk, overlap)
@@ -440,6 +457,27 @@ func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
 		}
 		return false, readErr
 	}
+}
+
+func (s *textSearcher) buffer(size int) []byte {
+	if cap(s.buf) < size {
+		s.buf = make([]byte, size)
+	}
+	return s.buf[:size]
+}
+
+func (s *textSearcher) tailBuffer(size int) []byte {
+	if cap(s.tail) < size {
+		s.tail = make([]byte, 0, size)
+	}
+	return s.tail[:0]
+}
+
+func (s *textSearcher) bridgeBuffer(size int) []byte {
+	if cap(s.bridge) < size {
+		s.bridge = make([]byte, 0, size)
+	}
+	return s.bridge[:0]
 }
 
 func textSearchBufferSize(f *os.File) int {
@@ -462,12 +500,10 @@ func updateSearchTail(tail, chunk []byte, count int) []byte {
 	}
 	needed := count - len(chunk)
 	if len(tail) > needed {
-		tail = tail[len(tail)-needed:]
+		copy(tail, tail[len(tail)-needed:])
+		tail = tail[:needed]
 	}
-	next := make([]byte, 0, count)
-	next = append(next, tail...)
-	next = append(next, chunk...)
-	return next
+	return append(tail, chunk...)
 }
 
 func isTextSearchKind(kind string) bool {
