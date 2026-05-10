@@ -147,13 +147,10 @@ func runSearch(project unityasset.Project, files []unityasset.FileEntry, scripts
 	wg.Wait()
 	close(results)
 
-	collected := make([]searchFileResult, 0, len(files))
+	collected := make([]searchFileResult, len(files))
 	for result := range results {
-		collected = append(collected, result)
+		collected[result.Index] = result
 	}
-	sort.Slice(collected, func(i, j int) bool {
-		return collected[i].Index < collected[j].Index
-	})
 
 	matches := make([]searchMatch, 0)
 	warnings := make([]searchWarning, 0)
@@ -389,16 +386,29 @@ func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
 		return true, nil
 	}
 
+	overlap := len(needleBytes) - 1
 	buf := make([]byte, textSearchChunkSize)
-	tail := make([]byte, 0, len(needleBytes)-1)
+	tail := make([]byte, 0, overlap)
+	bridge := make([]byte, 0, overlap*2)
 	for {
 		n, readErr := f.Read(buf)
 		if n > 0 {
-			chunk := append(tail, buf[:n]...)
+			chunk := buf[:n]
+			if len(tail) > 0 {
+				bridge = append(bridge[:0], tail...)
+				take := overlap
+				if take > len(chunk) {
+					take = len(chunk)
+				}
+				bridge = append(bridge, chunk[:take]...)
+				if bytes.Contains(bridge, needleBytes) {
+					return true, nil
+				}
+			}
 			if bytes.Contains(chunk, needleBytes) {
 				return true, nil
 			}
-			tail = trailingBytes(chunk, len(needleBytes)-1)
+			tail = updateSearchTail(tail, chunk, overlap)
 		}
 		if readErr == nil {
 			continue
@@ -410,16 +420,23 @@ func fileContains(file unityasset.FileEntry, needle string) (bool, error) {
 	}
 }
 
-func trailingBytes(data []byte, count int) []byte {
+func updateSearchTail(tail, chunk []byte, count int) []byte {
 	if count <= 0 {
 		return nil
 	}
-	if len(data) > count {
-		data = data[len(data)-count:]
+	if len(chunk) >= count {
+		tail = tail[:count]
+		copy(tail, chunk[len(chunk)-count:])
+		return tail
 	}
-	out := make([]byte, len(data))
-	copy(out, data)
-	return out
+	needed := count - len(chunk)
+	if len(tail) > needed {
+		tail = tail[len(tail)-needed:]
+	}
+	next := make([]byte, 0, count)
+	next = append(next, tail...)
+	next = append(next, chunk...)
+	return next
 }
 
 func isTextSearchKind(kind string) bool {

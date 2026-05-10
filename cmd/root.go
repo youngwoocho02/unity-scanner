@@ -111,6 +111,9 @@ func containsFold(s, needle string) bool {
 	if needle == "" {
 		return true
 	}
+	if strings.Contains(s, needle) {
+		return true
+	}
 	return strings.Contains(strings.ToLower(s), strings.ToLower(needle))
 }
 

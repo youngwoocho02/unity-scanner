@@ -18,6 +18,33 @@ var (
 	guidRE   = regexp.MustCompile(`guid:\s*([0-9a-fA-F]+)`)
 )
 
+var nativeClassNames = map[int]string{
+	1:        "GameObject",
+	4:        "Transform",
+	20:       "Camera",
+	23:       "MeshRenderer",
+	33:       "MeshFilter",
+	64:       "MeshCollider",
+	65:       "BoxCollider",
+	81:       "AudioListener",
+	82:       "AudioSource",
+	95:       "Animator",
+	108:      "Light",
+	114:      "MonoBehaviour",
+	115:      "MonoScript",
+	120:      "LineRenderer",
+	137:      "SkinnedMeshRenderer",
+	156:      "Terrain",
+	198:      "ParticleSystem",
+	212:      "SpriteRenderer",
+	222:      "CanvasRenderer",
+	223:      "Canvas",
+	224:      "RectTransform",
+	225:      "CanvasGroup",
+	329:      "VideoPlayer",
+	73398921: "VFXRenderer",
+}
+
 type Asset struct {
 	Path        string
 	Kind        string
@@ -421,33 +448,7 @@ func ReadMetaGUID(path string) string {
 }
 
 func NativeClassName(classID int) string {
-	names := map[int]string{
-		1:        "GameObject",
-		4:        "Transform",
-		20:       "Camera",
-		23:       "MeshRenderer",
-		33:       "MeshFilter",
-		64:       "MeshCollider",
-		65:       "BoxCollider",
-		81:       "AudioListener",
-		82:       "AudioSource",
-		95:       "Animator",
-		108:      "Light",
-		114:      "MonoBehaviour",
-		115:      "MonoScript",
-		120:      "LineRenderer",
-		137:      "SkinnedMeshRenderer",
-		156:      "Terrain",
-		198:      "ParticleSystem",
-		212:      "SpriteRenderer",
-		223:      "Canvas",
-		224:      "RectTransform",
-		225:      "CanvasGroup",
-		222:      "CanvasRenderer",
-		329:      "VideoPlayer",
-		73398921: "VFXRenderer",
-	}
-	return names[classID]
+	return nativeClassNames[classID]
 }
 
 func readScalar(lines []string, key string) string {
