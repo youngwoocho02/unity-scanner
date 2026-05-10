@@ -102,10 +102,6 @@ func ReadAssetSummary(entry FileEntry, scripts ScriptIndex) (*Asset, error) {
 	return readAssetWithOptions(entry, scripts, ParseOptions{}, false)
 }
 
-func ReadAssetWithOptions(entry FileEntry, scripts ScriptIndex, opts ParseOptions) (*Asset, error) {
-	return readAssetWithOptions(entry, scripts, opts, true)
-}
-
 func readAssetWithOptions(entry FileEntry, scripts ScriptIndex, opts ParseOptions, readMeta bool) (*Asset, error) {
 	data, err := os.ReadFile(entry.Abs)
 	if err != nil {
