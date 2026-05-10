@@ -137,7 +137,7 @@ MonoBehaviour:
 		"cccccccccccccccccccccccccccccccc": "Assets/Scripts/OtherComponent.cs",
 	}
 
-	guids := fieldReferenceGUIDs(asset, readOptions{component: "TargetComponent"})
+	guids := fieldReferenceGUIDs(asset, asset.FlattenNodes(), readOptions{component: "TargetComponent"})
 	if len(guids) != 1 || !guids["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] {
 		t.Fatalf("guids=%#v", guids)
 	}

@@ -78,18 +78,20 @@ func readCmd(args []string) error {
 		return err
 	}
 	asset.ScriptIndex = scripts
-	if fieldGUIDs := fieldReferenceGUIDs(asset, opts); len(fieldGUIDs) > 0 {
+	roots := asset.Hierarchy()
+	flat := flattenHierarchy(roots)
+	if fieldGUIDs := fieldReferenceGUIDs(asset, flat, opts); len(fieldGUIDs) > 0 {
 		guidIndex, err := unityasset.BuildGUIDIndexForGUIDs(project, fieldGUIDs)
 		if err != nil {
 			return err
 		}
 		asset.GUIDIndex = guidIndex
 	}
-	printRead(asset, opts)
+	printRead(asset, roots, flat, opts)
 	return nil
 }
 
-func fieldReferenceGUIDs(asset *unityasset.Asset, opts readOptions) map[string]bool {
+func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, opts readOptions) map[string]bool {
 	guids := map[string]bool{}
 	if asset.Kind == "asset" {
 		addObjectFieldGUIDs(guids, asset.Objects)
@@ -98,7 +100,7 @@ func fieldReferenceGUIDs(asset *unityasset.Asset, opts readOptions) map[string]b
 	if opts.component == "" {
 		return guids
 	}
-	for _, node := range asset.FlattenNodes() {
+	for _, node := range nodes {
 		if opts.path != "" && !containsFold(node.Path, opts.path) {
 			continue
 		}
@@ -117,9 +119,7 @@ func addObjectFieldGUIDs(guids map[string]bool, objects []*unityasset.Object) {
 	}
 }
 
-func printRead(asset *unityasset.Asset, opts readOptions) {
-	roots := asset.Hierarchy()
-	flat := flattenHierarchy(roots)
+func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unityasset.Node, opts readOptions) {
 	componentCount := 0
 	for _, goObj := range asset.GameObjects() {
 		componentCount += len(asset.ComponentsFor(goObj.ID))

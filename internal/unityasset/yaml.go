@@ -273,8 +273,9 @@ func (a *Asset) Hierarchy() []*Node {
 		parentTransform[obj.ID] = obj.FatherTransformID
 	}
 
-	nodes := map[string]*Node{}
-	for _, goObj := range a.GameObjects() {
+	gameObjects := a.GameObjects()
+	nodes := make(map[string]*Node, len(gameObjects))
+	for _, goObj := range gameObjects {
 		nodes[goObj.ID] = &Node{GameObject: goObj}
 	}
 
@@ -294,7 +295,7 @@ func (a *Asset) Hierarchy() []*Node {
 	}
 
 	roots := make([]*Node, 0)
-	for _, goObj := range a.GameObjects() {
+	for _, goObj := range gameObjects {
 		node := nodes[goObj.ID]
 		if node == nil || hasParent[goObj.ID] {
 			continue
