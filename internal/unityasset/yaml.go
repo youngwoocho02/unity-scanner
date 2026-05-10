@@ -6,16 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-)
-
-var (
-	headerRE = regexp.MustCompile(`^--- !u!(\d+) &(-?\d+)`)
-	fileIDRE = regexp.MustCompile(`fileID:\s*(-?\d+)`)
-	guidRE   = regexp.MustCompile(`guid:\s*([0-9a-fA-F]+)`)
 )
 
 var nativeClassNames = map[int]string{
@@ -114,13 +107,12 @@ func ParseAsset(data []byte) (*Asset, error) {
 	var current *Object
 	for scanner.Scan() {
 		line := scanner.Text()
-		if m := headerRE.FindStringSubmatch(line); m != nil {
+		if classID, id, ok := parseHeaderLine(line); ok {
 			if current != nil {
 				asset.finishObject(current)
 			}
-			classID, _ := strconv.Atoi(m[1])
 			current = &Object{
-				ID:      m[2],
+				ID:      id,
 				ClassID: classID,
 				Order:   len(asset.Objects),
 			}
@@ -331,15 +323,14 @@ func (a *Asset) ResolveReferences(value string) string {
 	if len(a.GUIDIndex) == 0 {
 		return value
 	}
-	matches := guidRE.FindAllStringSubmatch(value, -1)
-	if len(matches) == 0 {
+	guids := findGUIDs(value)
+	if len(guids) == 0 {
 		return value
 	}
 
-	paths := make([]string, 0, len(matches))
+	paths := make([]string, 0, len(guids))
 	seen := map[string]bool{}
-	for _, match := range matches {
-		guid := strings.ToLower(match[1])
+	for _, guid := range guids {
 		path := a.GUIDIndex[guid]
 		if path == "" || seen[path] {
 			continue
@@ -474,6 +465,27 @@ func NativeClassName(classID int) string {
 	return nativeClassNames[classID]
 }
 
+func parseHeaderLine(line string) (int, string, bool) {
+	const prefix = "--- !u!"
+	if !strings.HasPrefix(line, prefix) {
+		return 0, "", false
+	}
+	rest := line[len(prefix):]
+	space := strings.IndexByte(rest, ' ')
+	if space <= 0 || space+2 > len(rest) || rest[space+1] != '&' {
+		return 0, "", false
+	}
+	classID, err := strconv.Atoi(rest[:space])
+	if err != nil {
+		return 0, "", false
+	}
+	id := rest[space+2:]
+	if id == "" {
+		return 0, "", false
+	}
+	return classID, id, true
+}
+
 func readScalar(lines []string, key string) string {
 	prefix := "  " + key + ":"
 	for _, line := range lines {
@@ -517,19 +529,71 @@ func readComponentIDs(lines []string) []string {
 }
 
 func extractFileID(line string) string {
-	m := fileIDRE.FindStringSubmatch(line)
-	if m == nil {
+	start := strings.Index(line, "fileID:")
+	if start < 0 {
 		return ""
 	}
-	return m[1]
+	i := start + len("fileID:")
+	for i < len(line) && line[i] == ' ' {
+		i++
+	}
+	begin := i
+	if i < len(line) && line[i] == '-' {
+		i++
+	}
+	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
+		i++
+	}
+	if i == begin || (line[begin] == '-' && i == begin+1) {
+		return ""
+	}
+	return line[begin:i]
 }
 
 func extractGUID(line string) string {
-	m := guidRE.FindStringSubmatch(line)
-	if m == nil {
+	start := strings.Index(line, "guid:")
+	if start < 0 {
 		return ""
 	}
-	return strings.ToLower(m[1])
+	return scanGUID(line[start+len("guid:"):])
+}
+
+func findGUIDs(value string) []string {
+	var out []string
+	for offset := 0; offset < len(value); {
+		start := strings.Index(value[offset:], "guid:")
+		if start < 0 {
+			break
+		}
+		offset += start + len("guid:")
+		guid := scanGUID(value[offset:])
+		if guid != "" {
+			out = append(out, guid)
+			offset += len(guid)
+		}
+	}
+	return out
+}
+
+func scanGUID(value string) string {
+	i := 0
+	for i < len(value) && value[i] == ' ' {
+		i++
+	}
+	start := i
+	for i < len(value) && isHex(value[i]) {
+		i++
+	}
+	if i == start {
+		return ""
+	}
+	return strings.ToLower(value[start:i])
+}
+
+func isHex(b byte) bool {
+	return (b >= '0' && b <= '9') ||
+		(b >= 'a' && b <= 'f') ||
+		(b >= 'A' && b <= 'F')
 }
 
 func cleanScalar(value string) string {
