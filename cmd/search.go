@@ -129,7 +129,7 @@ func runSearch(project unityasset.Project, files []unityasset.FileEntry, scripts
 		workers = len(files)
 	}
 	jobs := make(chan int)
-	results := make(chan searchFileResult, len(files))
+	results := make(chan searchFileResult, workers)
 
 	var wg sync.WaitGroup
 	for range workers {
@@ -138,22 +138,30 @@ func runSearch(project unityasset.Project, files []unityasset.FileEntry, scripts
 			defer wg.Done()
 			guidSearcher := makeTextSearcher(opts.guid)
 			for index := range jobs {
-				results <- searchOneFile(project, index, files[index], scripts, opts, &guidSearcher)
+				result := searchOneFile(project, index, files[index], scripts, opts, &guidSearcher)
+				if result.Matched || len(result.Warnings) > 0 {
+					results <- result
+				}
 			}
 		}()
 	}
 
-	for i := range files {
-		jobs <- i
-	}
-	close(jobs)
-	wg.Wait()
-	close(results)
+	go func() {
+		for i := range files {
+			jobs <- i
+		}
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
 
-	collected := make([]searchFileResult, len(files))
+	collected := make([]searchFileResult, 0)
 	for result := range results {
-		collected[result.Index] = result
+		collected = append(collected, result)
 	}
+	sort.Slice(collected, func(i, j int) bool {
+		return collected[i].Index < collected[j].Index
+	})
 
 	matches := make([]searchMatch, 0)
 	warnings := make([]searchWarning, 0)

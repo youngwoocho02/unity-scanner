@@ -125,6 +125,38 @@ func BenchmarkRunSearchGUIDManyFiles(b *testing.B) {
 	}
 }
 
+func BenchmarkRunSearchGUIDManyMisses(b *testing.B) {
+	dir := b.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		b.Fatal(err)
+	}
+	for i := 0; i < 2048; i++ {
+		path := filepath.Join(assets, fmt.Sprintf("File_%04d.prefab", i))
+		if err := os.WriteFile(path, []byte(strings.Repeat("x", 1024)), 0o644); err != nil {
+			b.Fatal(err)
+		}
+	}
+	project, err := unityasset.OpenProject(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	result, err := unityasset.Scan(project, "Assets", unityasset.ScanOptions{Kinds: unityasset.ParseKindSet("prefab")})
+	if err != nil {
+		b.Fatal(err)
+	}
+	opts := searchOptions{guid: "abcdef1234567890abcdef1234567890"}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		matches, warnings := runSearch(project, result.Files, unityasset.ScriptIndex{}, opts)
+		if len(matches) != 0 || len(warnings) != 0 {
+			b.Fatalf("matches=%d warnings=%d", len(matches), len(warnings))
+		}
+	}
+}
+
 func BenchmarkRunSearchFileNameHits(b *testing.B) {
 	dir := b.TempDir()
 	assets := filepath.Join(dir, "Assets")
@@ -298,6 +330,27 @@ Transform:
 	for i := 1; i < len(matches); i++ {
 		if matches[i-1].File.AssetPath > matches[i].File.AssetPath {
 			t.Fatalf("matches out of order: %s > %s", matches[i-1].File.AssetPath, matches[i].File.AssetPath)
+		}
+	}
+}
+
+func TestRunSearchParallelKeepsWarningOrder(t *testing.T) {
+	files := make([]unityasset.FileEntry, 40)
+	for i := range files {
+		files[i] = unityasset.FileEntry{
+			Abs:       filepath.Join("missing", fmt.Sprintf("File_%02d.asset", i)),
+			AssetPath: fmt.Sprintf("Assets/File_%02d.asset", i),
+			Kind:      "asset",
+		}
+	}
+
+	_, warnings := runSearch(unityasset.Project{}, files, unityasset.ScriptIndex{}, searchOptions{guid: "abcdef"})
+	if len(warnings) != len(files) {
+		t.Fatalf("warnings=%d", len(warnings))
+	}
+	for i := 1; i < len(warnings); i++ {
+		if warnings[i-1].Path > warnings[i].Path {
+			t.Fatalf("warnings out of order: %s > %s", warnings[i-1].Path, warnings[i].Path)
 		}
 	}
 }
