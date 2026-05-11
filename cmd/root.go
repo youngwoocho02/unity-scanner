@@ -124,18 +124,26 @@ func printHelp(w io.Writer) {
 
 Usage:
   unity-scanner <command> [options] [path]
+  unity-scanner help [command]
 
 Commands:
-  list     compressed ls for Unity assets
-  read     readable summary for .prefab/.unity/.asset YAML
-  search   structured name/component/guid search
+  list     compressed ls for Unity assets (alias: ls)
+  read     readable summary for .prefab/.unity/.asset YAML (alias: cat)
+  search   structured name/component/guid search (alias: find)
   refs     find Unity YAML references to an asset GUID
   update   update to the latest GitHub release
+  help     show general help or command help
+  version  print version
 
-Common:
+Root options:
+  -h, --help             Show help
+  -v, --version          Print version
+
+Project commands:
   -p, --project <path>   Unity project path
 
 Examples:
+  unity-scanner help read
   unity-scanner list -p /projects/MyUnityProject Assets --depth 2
   unity-scanner read -p . Assets/Scenes/Main.unity --component GameManager
   unity-scanner search -p . --name Station --type prefab,scene
@@ -150,16 +158,34 @@ func printTopicHelp(w io.Writer, topic string) {
 		fmt.Fprint(w, `Usage:
   unity-scanner list [options] [path]
 
+Aliases:
+  ls
+
+Common:
+  -p, --project <path>   Unity project path
+  -h, --help             Show help
+
 Options:
   --depth <n>       directory summary depth, default 2
   --kind <list>     comma-separated kinds: prefab,scene,asset,cs,mat
   --meta            include .meta files in body
   --flat            omit directory summary, print grouped names only
   --limit <n>       max groups, default 80
+
+Examples:
+  unity-scanner list -p . Assets --depth 2
+  unity-scanner ls -p . Assets/Prefabs --kind prefab --flat
 `)
 	case "read", "cat":
 		fmt.Fprint(w, `Usage:
   unity-scanner read [options] <asset>
+
+Aliases:
+  cat
+
+Common:
+  -p, --project <path>   Unity project path
+  -h, --help             Show help
 
 Options:
   --depth <n>          hierarchy depth, default 2
@@ -168,10 +194,21 @@ Options:
   --field-limit <n>    max fields per component, default 20
   --limit <n>          max GameObjects/component matches, default 60
   --full-tree          show every visible tree row without render-only folding
+
+Examples:
+  unity-scanner read -p . Assets/Scenes/Main.unity --depth 3
+  unity-scanner cat -p . Assets/Prefabs/Hero.prefab --component MeshRenderer
 `)
 	case "search", "find":
 		fmt.Fprint(w, `Usage:
   unity-scanner search [options] [path]
+
+Aliases:
+  find
+
+Common:
+  -p, --project <path>   Unity project path
+  -h, --help             Show help
 
 Options:
   --name <text>        match file or GameObject name
@@ -181,15 +218,27 @@ Options:
   --type <list>        prefab,scene,asset,cs,mat
   --compact           one-line grouped result
   --limit <n>          max result files, default 80
+
+Examples:
+  unity-scanner search -p . --name Station --type prefab,scene
+  unity-scanner find -p . Assets --component GameManager --compact
 `)
 	case "refs":
 		fmt.Fprint(w, `Usage:
   unity-scanner refs [options] <asset-or-guid> [scan-path]
 
+Common:
+  -p, --project <path>   Unity project path
+  -h, --help             Show help
+
 Options:
   --type <list>        prefab,scene,asset,mat,controller
   --detail             print detailed matches instead of compact groups
   --limit <n>          max result files, default 80
+
+Examples:
+  unity-scanner refs -p . Assets/Scripts/Foo.cs
+  unity-scanner refs -p . 0123456789abcdef0123456789abcdef Assets/Prefabs
 `)
 	case "update":
 		fmt.Fprint(w, `Usage:
@@ -198,6 +247,7 @@ Options:
 Update the CLI binary to the latest release from GitHub.
 
 Options:
+  -h, --help            Show help
   --check              Check for updates without installing
 
 Examples:

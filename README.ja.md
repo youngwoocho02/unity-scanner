@@ -66,13 +66,24 @@ unity-scanner read   -p <project> <asset>
 unity-scanner search -p <project> [path] [filters]
 unity-scanner refs   -p <project> <asset-or-guid> [scan-path]
 unity-scanner update [--check]
+unity-scanner help [command]
+unity-scanner version
 ```
 
-共通 option:
+ルート option:
+
+```text
+-h, --help             ヘルプを表示
+-v, --version          バージョンを表示
+```
+
+プロジェクト command option:
 
 ```text
 -p, --project <path>   Unity project path
 ```
+
+コマンド alias: `ls` = `list`, `cat` = `read`, `find` = `search`
 
 ## list
 

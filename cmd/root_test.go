@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +23,48 @@ func TestReorderFlagArgsAllowsFlagsAfterPath(t *testing.T) {
 	want := []string{"--kind", "prefab", "--flat", "-p", "C:/Project", "Assets/Foo"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestHelpIncludesCommandDiscovery(t *testing.T) {
+	out := executeOutput(t)
+	for _, want := range []string{
+		"unity-scanner help [command]",
+		"list     compressed ls for Unity assets (alias: ls)",
+		"search   structured name/component/guid search (alias: find)",
+		"help     show general help or command help",
+		"version  print version",
+		"Root options:\n  -h, --help             Show help",
+		"Project commands:\n  -p, --project <path>   Unity project path",
+		"-h, --help             Show help",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help missing %q\n%s", want, out)
+		}
+	}
+}
+
+func TestTopicHelpIncludesCommonFlagsAndExamples(t *testing.T) {
+	tests := []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"help", "list"}, []string{"Usage:\n  unity-scanner list", "Aliases:\n  ls", "-p, --project <path>", "unity-scanner ls -p ."}},
+		{[]string{"read", "--help"}, []string{"Usage:\n  unity-scanner read", "Aliases:\n  cat", "--full-tree", "unity-scanner cat -p ."}},
+		{[]string{"search", "Assets", "--help"}, []string{"Usage:\n  unity-scanner search", "Aliases:\n  find", "--ref <guid>", "unity-scanner find -p ."}},
+		{[]string{"refs", "-h"}, []string{"Usage:\n  unity-scanner refs", "-p, --project <path>", "--detail", "0123456789abcdef0123456789abcdef"}},
+		{[]string{"update", "--help"}, []string{"Usage:\n  unity-scanner update", "-h, --help", "--check", "unity-scanner update --check"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			out := executeOutput(t, tt.args...)
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Fatalf("help missing %q\n%s", want, out)
+				}
+			}
+		})
 	}
 }
 
@@ -74,4 +117,16 @@ MonoBehaviour:
 			}
 		})
 	}
+}
+
+func executeOutput(t *testing.T, args ...string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := Execute(args)
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
 }

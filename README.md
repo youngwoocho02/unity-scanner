@@ -66,13 +66,24 @@ unity-scanner read   -p <project> <asset>
 unity-scanner search -p <project> [path] [filters]
 unity-scanner refs   -p <project> <asset-or-guid> [scan-path]
 unity-scanner update [--check]
+unity-scanner help [command]
+unity-scanner version
 ```
 
-Common option:
+Root options:
+
+```text
+-h, --help             Show help
+-v, --version          Print version
+```
+
+Project command option:
 
 ```text
 -p, --project <path>   Unity project path
 ```
+
+Command aliases: `ls` = `list`, `cat` = `read`, `find` = `search`.
 
 ## list
 

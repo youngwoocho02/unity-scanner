@@ -66,13 +66,24 @@ unity-scanner read   -p <project> <asset>
 unity-scanner search -p <project> [path] [filters]
 unity-scanner refs   -p <project> <asset-or-guid> [scan-path]
 unity-scanner update [--check]
+unity-scanner help [command]
+unity-scanner version
 ```
 
-공통 옵션:
+루트 옵션:
+
+```text
+-h, --help             도움말 출력
+-v, --version          버전 출력
+```
+
+프로젝트 명령 옵션:
 
 ```text
 -p, --project <path>   Unity project path
 ```
+
+명령 alias: `ls` = `list`, `cat` = `read`, `find` = `search`
 
 ## list
 
