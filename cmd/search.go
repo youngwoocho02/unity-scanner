@@ -65,8 +65,10 @@ type searchFileResult struct {
 
 const textSearchChunkSize = 1024 * 1024
 
+var currentSearchLineWidth = 1200
+
 func searchCmd(args []string) error {
-	opts := searchOptions{limit: 80}
+	opts := searchOptions{}
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.StringVar(&opts.name, "name", "", "file or GameObject name")
@@ -348,6 +350,7 @@ func componentAndObjectPath(asset *unityasset.Asset, obj *unityasset.Object) (st
 }
 
 func printSearch(matches []searchMatch, kindCounts map[string]int, opts searchOptions, warnings []searchWarning) {
+	currentSearchLineWidth = opts.lineWidth
 	if opts.limit <= 0 || opts.limit > len(matches) {
 		opts.limit = len(matches)
 	}
@@ -413,14 +416,14 @@ func printSearchMatch(match searchMatch) {
 	}
 	for _, ref := range match.Refs {
 		if ref.Object != "" {
-			fmt.Printf("    object: %s\n", ref.Object)
+			printfLineLimited(currentSearchLineWidth, "    object: %s", ref.Object)
 		}
 		if ref.Component != "" {
-			fmt.Printf("    component: %s\n", ref.Component)
+			printfLineLimited(currentSearchLineWidth, "    component: %s", ref.Component)
 		}
-		fmt.Printf("    field: %s\n", ref.Field)
+		printfLineLimited(currentSearchLineWidth, "    field: %s", ref.Field)
 		if ref.Value != "" {
-			fmt.Printf("    value: %s\n", ref.Value)
+			printfLineLimited(currentSearchLineWidth, "    value: %s", ref.Value)
 		}
 	}
 	objectLimit := len(match.Objects)
@@ -428,9 +431,9 @@ func printSearchMatch(match searchMatch) {
 		objectLimit = 12
 	}
 	for _, obj := range match.Objects[:objectLimit] {
-		fmt.Printf("    object: %s\n", obj.Path)
+		printfLineLimited(currentSearchLineWidth, "    object: %s", obj.Path)
 		if len(obj.Components) > 0 {
-			fmt.Printf("    components: %s\n", strings.Join(obj.Components, ", "))
+			printfLineLimited(currentSearchLineWidth, "    components: %s", strings.Join(obj.Components, ", "))
 		}
 	}
 	if len(match.Objects) > objectLimit {
@@ -467,7 +470,7 @@ func printSearchCompact(matches []searchMatch, rootPath string) {
 		names := format.CompressNames(grouped[key])
 		fmt.Printf("[%s]\n", parts[0])
 		for _, line := range format.Lines(names, 8) {
-			fmt.Printf("  %s :: %s\n", compactGroupDir(parts[1], rootPath), line)
+			printfLineLimited(currentSearchLineWidth, "  %s :: %s", compactGroupDir(parts[1], rootPath), line)
 		}
 	}
 }

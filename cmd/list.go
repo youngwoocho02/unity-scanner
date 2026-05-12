@@ -22,7 +22,7 @@ type listOptions struct {
 }
 
 func listCmd(args []string) error {
-	opts := listOptions{depth: 2, limit: 80}
+	opts := listOptions{depth: -1}
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.IntVar(&opts.depth, "depth", opts.depth, "directory summary depth")
@@ -66,7 +66,7 @@ func printList(rootPath string, result unityasset.ScanResult, opts listOptions) 
 	if !opts.flat {
 		printDirs(result.Files, rootPath, opts.depth)
 	}
-	printGroups(groups, rootPath, opts.limit)
+	printGroups(groups, rootPath, opts.limit, opts.lineWidth)
 }
 
 func printExt(counts map[string]int) {
@@ -92,7 +92,7 @@ func printExt(counts map[string]int) {
 type dirCounts map[string]map[string]int
 
 func printDirs(files []unityasset.FileEntry, root string, depth int) {
-	if depth < 0 || len(files) == 0 {
+	if len(files) == 0 {
 		return
 	}
 	counts := dirCounts{}
@@ -137,7 +137,7 @@ func trimDirToDepth(dir, root string, depth int) string {
 		return "."
 	}
 	parts := strings.Split(dir, "/")
-	if len(parts) > depth {
+	if depth >= 0 && len(parts) > depth {
 		parts = parts[:depth]
 	}
 	return strings.Join(parts, "/")
@@ -192,7 +192,7 @@ func groupEntries(files []unityasset.FileEntry) []entryGroup {
 	return groups
 }
 
-func printGroups(groups []entryGroup, rootPath string, limit int) {
+func printGroups(groups []entryGroup, rootPath string, limit int, lineWidth int) {
 	if len(groups) == 0 {
 		fmt.Println("GROUPS\n  <empty>")
 		return
@@ -207,7 +207,7 @@ func printGroups(groups []entryGroup, rootPath string, limit int) {
 		names := format.CompressNames(group.Names)
 		fmt.Printf("  %s  [%s]\n", compactGroupDir(group.Dir, rootPath), group.Kind)
 		for _, line := range format.Lines(names, 6) {
-			fmt.Printf("    %s\n", line)
+			printfLineLimited(lineWidth, "    %s", line)
 		}
 	}
 	if len(groups) > limit {

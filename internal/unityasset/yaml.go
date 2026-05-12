@@ -229,9 +229,6 @@ func AddVisibleFieldGUIDs(guids map[string]bool, obj *Object, limit int) {
 	if obj == nil {
 		return
 	}
-	if limit <= 0 {
-		limit = 20
-	}
 	visible := 0
 	for i := 0; i < len(obj.Lines); i++ {
 		line := obj.Lines[i]
@@ -247,7 +244,7 @@ func AddVisibleFieldGUIDs(guids map[string]bool, obj *Object, limit int) {
 		if skipField(key) {
 			continue
 		}
-		if visible >= limit {
+		if limit > 0 && visible >= limit {
 			return
 		}
 		visible++
@@ -378,10 +375,7 @@ func (a *Asset) Fields(obj *Object, limit int) []Field {
 }
 
 func (a *Asset) FieldsWithHidden(obj *Object, limit int) ([]Field, int) {
-	if limit <= 0 {
-		limit = 20
-	}
-	fields := make([]Field, 0, limit)
+	fields := make([]Field, 0)
 	hidden := 0
 	for i := 0; i < len(obj.Lines); i++ {
 		line := obj.Lines[i]
@@ -397,7 +391,7 @@ func (a *Asset) FieldsWithHidden(obj *Object, limit int) ([]Field, int) {
 		if skipField(key) {
 			continue
 		}
-		if len(fields) >= limit {
+		if limit > 0 && len(fields) >= limit {
 			hidden++
 			continue
 		}
@@ -996,7 +990,7 @@ func skipField(key string) bool {
 	switch key {
 	case "m_Name", "m_ObjectHideFlags", "m_CorrespondingSourceObject", "m_PrefabInstance",
 		"m_PrefabAsset", "serializedVersion", "m_GameObject", "m_Script",
-		"m_Enabled", "m_EditorHideFlags", "m_EditorClassIdentifier":
+		"m_Enabled", "m_EditorHideFlags", "m_EditorClassIdentifier", "m_Modification":
 		return true
 	default:
 		return false

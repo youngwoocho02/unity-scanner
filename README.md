@@ -81,6 +81,7 @@ Project command option:
 
 ```text
 -p, --project <path>   Unity project path
+--line-width <n>       Max output line width, default 1200, 0 disables truncation
 ```
 
 Command aliases: `ls` = `list`, `cat` = `read`, `find` = `search`.
@@ -377,21 +378,21 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 ### list
 
 ```text
---depth <n>       directory summary depth, default 2
+--depth <n>       directory summary depth, default unlimited
 --kind <list>     comma-separated kinds: prefab,scene,asset,cs,mat
 --meta            include .meta files in body
 --flat            omit directory summary
---limit <n>       max groups, default 80
+--limit <n>       max groups, default unlimited
 ```
 
 ### read
 
 ```text
---depth <n>          hierarchy depth, default 2
+--depth <n>          hierarchy depth, default unlimited
 --path <name/path>   only show matching object branch
 --component <name>   show fields for matching component
---field-limit <n>    max fields per component, default 20
---limit <n>          max GameObjects/component matches, default 60
+--field-limit <n>    max fields per component, default unlimited
+--limit <n>          max GameObjects/component matches, default unlimited
 --full-tree          show every visible tree row without render-only folding
 ```
 
@@ -406,7 +407,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --type <list>        prefab,scene,asset,cs,mat
 --compact            one-line grouped result
 --warnings <mode>    summary or detail, default summary
---limit <n>          max result files, default 80
+--limit <n>          max result files, default unlimited
 ```
 
 ### refs
@@ -415,7 +416,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --type <list>        prefab,scene,asset,mat,controller
 --detail             print detailed matches instead of compact groups
 --warnings <mode>    summary or detail, default summary
---limit <n>          max result files, default 80
+--limit <n>          max result files, default unlimited
 ```
 
 ### update

@@ -44,12 +44,34 @@ func Execute(args []string) error {
 }
 
 type commonOptions struct {
-	project string
+	project   string
+	lineWidth int
 }
 
 func addCommonFlags(fs *flag.FlagSet, opts *commonOptions) {
+	opts.lineWidth = 1200
 	fs.StringVar(&opts.project, "project", "", "Unity project path")
 	fs.StringVar(&opts.project, "p", "", "Unity project path")
+	fs.IntVar(&opts.lineWidth, "line-width", opts.lineWidth, "max output line width, 0 disables truncation")
+}
+
+func lineLimit(opts commonOptions) int {
+	return opts.lineWidth
+}
+
+func printLineLimited(limit int, line string) {
+	if limit > 0 && len(line) > limit {
+		if limit <= 3 {
+			line = line[:limit]
+		} else {
+			line = line[:limit-3] + "..."
+		}
+	}
+	fmt.Println(line)
+}
+
+func printfLineLimited(limit int, format string, args ...any) {
+	printLineLimited(limit, fmt.Sprintf(format, args...))
 }
 
 func parse(fs *flag.FlagSet, args []string) error {
@@ -141,6 +163,7 @@ Root options:
 
 Project commands:
   -p, --project <path>   Unity project path
+  --line-width <n>       Max output line width, default 1200, 0 disables truncation
 
 Examples:
   unity-scanner help read
@@ -164,13 +187,14 @@ Aliases:
 Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
+  --line-width <n>       Max output line width, default 1200, 0 disables truncation
 
 Options:
-  --depth <n>       directory summary depth, default 2
+  --depth <n>       directory summary depth, default unlimited
   --kind <list>     comma-separated kinds: prefab,scene,asset,cs,mat
   --meta            include .meta files in body
   --flat            omit directory summary, print grouped names only
-  --limit <n>       max groups, default 80
+  --limit <n>       max groups, default unlimited
 
 Examples:
   unity-scanner list -p . Assets --depth 2
@@ -186,13 +210,14 @@ Aliases:
 Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
+  --line-width <n>       Max output line width, default 1200, 0 disables truncation
 
 Options:
-  --depth <n>          hierarchy depth, default 2
+  --depth <n>          hierarchy depth, default unlimited
   --path <name/path>   only show matching object branch
   --component <name>   show fields for matching component
-  --field-limit <n>    max fields per component, default 20
-  --limit <n>          max GameObjects/component matches, default 60
+  --field-limit <n>    max fields per component, default unlimited
+  --limit <n>          max GameObjects/component matches, default unlimited
   --full-tree          show every visible tree row without render-only folding
 
 Examples:
@@ -209,6 +234,7 @@ Aliases:
 Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
+  --line-width <n>       Max output line width, default 1200, 0 disables truncation
 
 Options:
   --name <text>        match file or GameObject name
@@ -219,7 +245,7 @@ Options:
   --type <list>        prefab,scene,asset,cs,mat
   --compact           one-line grouped result
   --warnings <mode>    warning output: summary or detail, default summary
-  --limit <n>          max result files, default 80
+  --limit <n>          max result files, default unlimited
 
 Examples:
   unity-scanner search -p . --name Station --type prefab,scene
@@ -232,12 +258,13 @@ Examples:
 Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
+  --line-width <n>       Max output line width, default 1200, 0 disables truncation
 
 Options:
   --type <list>        prefab,scene,asset,mat,controller
   --detail             print detailed matches instead of compact groups
   --warnings <mode>    warning output: summary or detail, default summary
-  --limit <n>          max result files, default 80
+  --limit <n>          max result files, default unlimited
 
 Examples:
   unity-scanner refs -p . Assets/Scripts/Foo.cs

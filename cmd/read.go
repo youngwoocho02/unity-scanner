@@ -22,7 +22,7 @@ type readOptions struct {
 }
 
 func readCmd(args []string) error {
-	opts := readOptions{depth: 2, fieldLimit: 20, limit: 60}
+	opts := readOptions{depth: -1}
 	fs := flag.NewFlagSet("read", flag.ContinueOnError)
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.IntVar(&opts.depth, "depth", opts.depth, "hierarchy depth")
@@ -73,12 +73,15 @@ func readCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	if sourceGUIDs := sourceGUIDSet(asset.SourcePrefabGUIDs()); len(sourceGUIDs) > 0 {
-		index, err := unityasset.BuildGUIDIndexForGUIDs(project, sourceGUIDs)
-		if err != nil {
-			return err
+	if entry.Kind == "prefab" {
+		sourceGUIDs := sourceGUIDSet(asset.SourcePrefabGUIDs())
+		if len(sourceGUIDs) > 0 {
+			index, err := unityasset.BuildGUIDIndexForGUIDs(project, sourceGUIDs)
+			if err != nil {
+				return err
+			}
+			asset.SourcePaths = sourcePaths(asset.SourcePrefabGUIDs(), index)
 		}
-		asset.SourcePaths = sourcePaths(asset.SourcePrefabGUIDs(), index)
 	}
 	scripts, err := unityasset.BuildScriptIndexForGUIDs(project, asset.ScriptGUIDs())
 	if err != nil {
@@ -161,15 +164,15 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 	if asset.GUID != "" {
 		fmt.Printf("GUID        %s\n", asset.GUID)
 	}
-	if len(asset.SourcePaths) > 0 {
-		fmt.Printf("PREFAB_SOURCES %s\n", strings.Join(asset.SourcePaths, ", "))
+	if opts.component == "" && len(asset.SourcePaths) > 0 {
+		printfLineLimited(opts.lineWidth, "PREFAB_SOURCES %s", strings.Join(asset.SourcePaths, ", "))
 	}
 	if len(flat) == 0 {
 		fmt.Printf("YAML_OBJECTS %d\n", len(asset.Objects))
 	} else {
 		fmt.Printf("OBJECTS     %d\n", len(flat))
 		fmt.Printf("COMPONENTS  %d\n", components.count)
-		if opts.component == "" {
+		if opts.component == "" && opts.depth >= 0 {
 			fmt.Printf("DEPTH       %d\n", opts.depth)
 		}
 	}
@@ -202,6 +205,12 @@ func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {
 
 func printHierarchy(roots []*unityasset.Node, components readComponentView, opts readOptions) {
 	rows, hidden := collectHierarchyRows(roots, components, opts)
+	if len(rows) == 0 {
+		if opts.path != "" {
+			printfLineLimited(opts.lineWidth, "no object path matched %q", opts.path)
+			return
+		}
+	}
 	focusRows, focusHidden := limitFocusRows(rows, opts.limit)
 	treeRows, limitHidden := limitTreeRows(rows, opts.limit)
 	hidden += limitHidden
@@ -215,7 +224,7 @@ func printHierarchy(roots []*unityasset.Node, components readComponentView, opts
 	if collapsed > 0 {
 		fmt.Printf("collapsed render-only: %d\n", collapsed)
 	}
-	if opts.path == "" {
+	if opts.path == "" && (hidden > 0 || collapsed > 0) {
 		fmt.Println("hint: use --depth N, --path NAME, --component NAME, or --full-tree")
 	}
 }
@@ -241,7 +250,7 @@ func collectHierarchyRows(roots []*unityasset.Node, components readComponentView
 					continue
 				}
 			}
-			if node.Depth > opts.depth {
+			if opts.depth >= 0 && node.Depth > opts.depth {
 				hidden += countNodes([]*unityasset.Node{node})
 				continue
 			}
@@ -350,7 +359,7 @@ func printTreeRows(rows []hierarchyRow, opts readOptions) int {
 	for i := 0; i < len(rows); {
 		groupEnd := collapsibleRunEnd(rows, i)
 		if groupEnd-i >= 3 {
-			printCollapsedRows(rows[i:groupEnd])
+			printCollapsedRows(rows[i:groupEnd], opts.lineWidth)
 			collapsed += groupEnd - i
 			i = groupEnd
 			continue
@@ -388,21 +397,14 @@ func printTreeRow(row hierarchyRow) {
 	fmt.Println()
 }
 
-func printCollapsedRows(rows []hierarchyRow) {
+func printCollapsedRows(rows []hierarchyRow, lineWidth int) {
 	first := rows[0]
 	names := make([]string, 0, len(rows))
 	for _, row := range rows {
 		names = append(names, displayObjectName(row.Node.GameObject))
 	}
 	indent := strings.Repeat("  ", first.Node.Depth)
-	fmt.Printf("%s[%d..%d] %s  %s  (%d)\n",
-		indent,
-		rows[0].Index,
-		rows[len(rows)-1].Index,
-		strings.Join(format.CompressNames(names), ", "),
-		first.ComponentSet,
-		len(rows),
-	)
+	printfLineLimited(lineWidth, "%s[%d..%d] %s  %s  (%d)", indent, rows[0].Index, rows[len(rows)-1].Index, strings.Join(format.CompressNames(names), ", "), first.ComponentSet, len(rows))
 }
 
 func hasFocusComponent(components []string) bool {
@@ -486,7 +488,7 @@ func printYAMLObjects(asset *unityasset.Asset, opts readOptions) {
 		}
 		fields, hidden := asset.FieldsWithHidden(obj, opts.fieldLimit)
 		for _, field := range fields {
-			fmt.Printf("    %-24s %s\n", field.Name, field.Value)
+			printfLineLimited(opts.lineWidth, "    %-24s %s", field.Name, field.Value)
 		}
 		if hidden > 0 {
 			fmt.Printf("    more fields: %d hidden by --field-limit\n", hidden)
@@ -524,7 +526,7 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 			} else {
 				fmt.Println("fields:")
 				for _, field := range fields {
-					fmt.Printf("  %-24s %s\n", field.Name, field.Value)
+					printfLineLimited(opts.lineWidth, "  %-24s %s", field.Name, field.Value)
 				}
 			}
 			if hiddenFields > 0 {
@@ -535,7 +537,7 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 	}
 	if matches == 0 {
 		fmt.Printf("no component matched %q\n", opts.component)
-		printAvailableComponents(components)
+		printAvailableComponents(components, opts.lineWidth)
 		printSourceHint(asset)
 	}
 	if hidden > 0 {
@@ -583,9 +585,9 @@ func displayObjectName(obj *unityasset.Object) string {
 	return "<unnamed:" + obj.ID + ">"
 }
 
-func printAvailableComponents(components readComponentView) {
+func printAvailableComponents(components readComponentView, lineWidth int) {
 	if len(components.names) > 0 {
-		fmt.Printf("available: %s\n", strings.Join(components.names, ", "))
+		printfLineLimited(lineWidth, "available: %s", strings.Join(components.names, ", "))
 	}
 }
 

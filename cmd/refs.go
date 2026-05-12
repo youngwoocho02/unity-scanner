@@ -22,7 +22,7 @@ type refsOptions struct {
 }
 
 func refsCmd(args []string) error {
-	opts := refsOptions{limit: 80}
+	opts := refsOptions{}
 	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.StringVar(&opts.types, "type", "", "comma-separated asset kinds")
@@ -63,12 +63,13 @@ func refsCmd(args []string) error {
 	}
 
 	searchOpts := searchOptions{
-		guid:         guid,
-		types:        opts.types,
-		compact:      !opts.detail,
-		warningsMode: opts.warningsMode,
-		limit:        opts.limit,
-		refDetail:    opts.detail,
+		guid:          guid,
+		types:         opts.types,
+		compact:       !opts.detail,
+		warningsMode:  opts.warningsMode,
+		limit:         opts.limit,
+		refDetail:     opts.detail,
+		commonOptions: commonOptions{lineWidth: opts.lineWidth},
 	}
 	_, searchOpts.rootPath, _ = project.Resolve(scanPath)
 	scripts := unityasset.ScriptIndex{}
@@ -80,7 +81,7 @@ func refsCmd(args []string) error {
 	}
 	matches, warnings := runSearch(project, result.Files, scripts, searchOpts)
 
-	fmt.Printf("REF     %s\n", label)
+	printfLineLimited(opts.lineWidth, "REF     %s", label)
 	fmt.Printf("GUID    %s\n\n", guid)
 	printSearch(matches, result.KindCount, searchOpts, warnings)
 	return nil

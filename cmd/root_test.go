@@ -68,6 +68,26 @@ func TestTopicHelpIncludesCommonFlagsAndExamples(t *testing.T) {
 	}
 }
 
+func TestPrintLineLimitedTruncatesLongLine(t *testing.T) {
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	printLineLimited(8, "abcdefghijklmnop")
+	restoreStdout()
+	if got := strings.TrimSpace(buf.String()); got != "abcde..." {
+		t.Fatalf("line=%q", got)
+	}
+}
+
+func TestPrintLineLimitedCanBeDisabled(t *testing.T) {
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	printLineLimited(0, "abcdefghijklmnop")
+	restoreStdout()
+	if got := strings.TrimSpace(buf.String()); got != "abcdefghijklmnop" {
+		t.Fatalf("line=%q", got)
+	}
+}
+
 func TestScanCommandsDoNotWriteUpdateCache(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

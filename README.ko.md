@@ -80,10 +80,11 @@ unity-scanner version
 프로젝트 명령 옵션:
 
 ```text
--p, --project <path>   Unity project path
+-p, --project <path>   Unity 프로젝트 경로
+--line-width <n>       출력 한 줄 최대 폭, 기본 1200, 0이면 자르지 않음
 ```
 
-명령 alias: `ls` = `list`, `cat` = `read`, `find` = `search`
+명령 별칭: `ls` = `list`, `cat` = `read`, `find` = `search`
 
 ## list
 
@@ -327,7 +328,7 @@ component search: 약 2000ms -> 1100ms
 
 ## refs
 
-특정 에셋 또는 raw GUID가 어디서 참조되는지 찾는다.
+특정 에셋 또는 원본 GUID가 어디서 참조되는지 찾는다.
 
 이 도구 없이 하면:
 
@@ -360,7 +361,7 @@ MATCHES  1
   . :: SampleConfig
 ```
 
-`refs`는 에셋 경로나 32자 raw GUID를 받는다.
+`refs`는 에셋 경로나 32자 원본 GUID를 받는다.
 
 차이:
 
@@ -377,45 +378,45 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 ### list
 
 ```text
---depth <n>       directory summary depth, default 2
---kind <list>     comma-separated kinds: prefab,scene,asset,cs,mat
---meta            include .meta files in body
---flat            omit directory summary
---limit <n>       max groups, default 80
+--depth <n>       디렉터리 요약 깊이, 기본 무제한
+--kind <list>     쉼표로 구분한 종류 목록: prefab,scene,asset,cs,mat
+--meta            본문에 .meta 파일 포함
+--flat            디렉터리 요약 생략
+--limit <n>       최대 그룹 수, 기본 무제한
 ```
 
 ### read
 
 ```text
---depth <n>          hierarchy depth, default 2
---path <name/path>   only show matching object branch
---component <name>   show fields for matching component
---field-limit <n>    max fields per component, default 20
---limit <n>          max GameObjects/component matches, default 60
---full-tree          show every visible tree row without render-only folding
+--depth <n>          계층 깊이, 기본 무제한
+--path <name/path>   일치하는 오브젝트 브랜치만 표시
+--component <name>   일치하는 컴포넌트의 필드 표시
+--field-limit <n>    컴포넌트별 최대 필드 수, 기본 무제한
+--limit <n>          최대 GameObject/컴포넌트 매치 수, 기본 무제한
+--full-tree          렌더 전용 접기 없이 보이는 트리 행 전부 표시
 ```
 
 ### search
 
 ```text
---name <text>        match file or GameObject name
---component <text>   match component/script name
---script-path <path> match MonoBehaviour scripts under asset path
---guid <guid>        match raw Unity GUID reference
---ref <guid>         alias of --guid
+--name <text>        파일명 또는 GameObject 이름 검색
+--component <text>   컴포넌트/스크립트 이름 검색
+--script-path <path> 지정 에셋 경로 아래 MonoBehaviour 스크립트 검색
+--guid <guid>        원본 Unity GUID 참조 검색
+--ref <guid>         --guid 별칭
 --type <list>        prefab,scene,asset,cs,mat
---compact            one-line grouped result
---warnings <mode>    summary or detail, default summary
---limit <n>          max result files, default 80
+--compact            한 줄 그룹 결과 출력
+--warnings <mode>    경고 출력 방식: summary 또는 detail, 기본 summary
+--limit <n>          최대 결과 파일 수, 기본 무제한
 ```
 
 ### refs
 
 ```text
 --type <list>        prefab,scene,asset,mat,controller
---detail             print detailed matches instead of compact groups
---warnings <mode>    summary or detail, default summary
---limit <n>          max result files, default 80
+--detail             압축 그룹 대신 상세 매치 출력
+--warnings <mode>    경고 출력 방식: summary 또는 detail, 기본 summary
+--limit <n>          최대 결과 파일 수, 기본 무제한
 ```
 
 ### update

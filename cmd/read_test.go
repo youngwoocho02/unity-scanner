@@ -222,7 +222,7 @@ MonoBehaviour:
 
 	var buf bytes.Buffer
 	restoreStdout := captureStdout(&buf)
-	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--component", "Config", "--field-limit", "10"})
+	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--field-limit", "10"})
 	restoreStdout()
 	if err != nil {
 		t.Fatal(err)
@@ -235,6 +235,72 @@ MonoBehaviour:
 	}
 	if strings.Contains(out, "k__BackingField") {
 		t.Fatalf("backing field leaked:\n%s", out)
+	}
+}
+
+func TestReadCmdOmitsPrefabSourcesForSceneAndComponentMatch(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "Config.cs.meta"), "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), "x")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  m_Name: Config
+  value: 1
+`)
+	writeTestFile(t, filepath.Join(assets, "Scene.unity.meta"), "guid: dddddddddddddddddddddddddddddddd\n")
+	writeTestFile(t, filepath.Join(assets, "Scene.unity"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+`)
+
+	var componentBuf bytes.Buffer
+	restoreStdout := captureStdout(&componentBuf)
+	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--component", "Config"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(componentBuf.String(), "PREFAB_SOURCES") {
+		t.Fatalf("component read leaked prefab sources:\n%s", componentBuf.String())
+	}
+
+	var sceneBuf bytes.Buffer
+	restoreStdout = captureStdout(&sceneBuf)
+	err = readCmd([]string{"-p", dir, "Assets/Scene.unity"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(sceneBuf.String(), "PREFAB_SOURCES") {
+		t.Fatalf("scene read leaked prefab sources:\n%s", sceneBuf.String())
+	}
+}
+
+func TestFieldReferenceGUIDsUnlimitedByDefault(t *testing.T) {
+	var yaml strings.Builder
+	yaml.WriteString("%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n")
+	for i := 0; i < 25; i++ {
+		guid := fmt.Sprintf("%032d", i)
+		yaml.WriteString(fmt.Sprintf("  field%d: {fileID: 1, guid: %s, type: 2}\n", i, guid))
+	}
+	asset, err := unityasset.ParseAsset([]byte(yaml.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset.Kind = "asset"
+
+	guids := fieldReferenceGUIDs(asset, nil, readComponentView{}, readOptions{})
+	if !guids["00000000000000000000000000000024"] {
+		t.Fatalf("unlimited field refs missed late guid: %#v", guids)
 	}
 }
 

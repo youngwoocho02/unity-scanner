@@ -148,3 +148,37 @@ MonoBehaviour:
 		}
 	}
 }
+
+func TestRefsCmdPrintsPrefabModificationFieldWithoutFullModificationDump(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Target.asset"), "x")
+	writeTestFile(t, filepath.Join(assets, "Target.asset.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "User.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 1, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+      propertyPath: profile
+      objectReference: {fileID: 11400000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+    - target: {fileID: 2, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+      propertyPath: noisy
+      objectReference: {fileID: 0}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := refsCmd([]string{"-p", dir, "Assets/Target.asset", "Assets", "--type", "prefab", "--detail"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "field: profile") {
+		t.Fatalf("missing prefab modification field:\n%s", out)
+	}
+	if strings.Contains(out, "field: m_Modification") || strings.Contains(out, "propertyPath: noisy") {
+		t.Fatalf("full modification leaked:\n%s", out)
+	}
+}

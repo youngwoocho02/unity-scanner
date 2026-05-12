@@ -77,13 +77,14 @@ unity-scanner version
 -v, --version          バージョンを表示
 ```
 
-プロジェクト command option:
+プロジェクトコマンドのオプション:
 
 ```text
--p, --project <path>   Unity project path
+-p, --project <path>   Unity プロジェクトのパス
+--line-width <n>       出力 1 行の最大幅。既定 1200、0 で切り詰め無効
 ```
 
-コマンド alias: `ls` = `list`, `cat` = `read`, `find` = `search`
+コマンド別名: `ls` = `list`, `cat` = `read`, `find` = `search`
 
 ## list
 
@@ -327,7 +328,7 @@ component search: 約 2000ms -> 1100ms
 
 ## refs
 
-特定 asset または raw GUID がどこで参照されているかを探す。
+特定アセットまたは未加工 GUID がどこで参照されているかを探す。
 
 このツールなしの場合:
 
@@ -360,7 +361,7 @@ MATCHES  1
   . :: SampleConfig
 ```
 
-`refs` は asset path または 32 文字の raw GUID を受け取る。
+`refs` はアセットパスまたは 32 文字の未加工 GUID を受け取る。
 
 差:
 
@@ -370,58 +371,58 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 削減:               文字数で約 89%
 ```
 
-対象 asset path は一度だけ解決する。結果は raw YAML reference line の繰り返しではなく、asset type と folder でまとまる。
+対象アセットパスは一度だけ解決する。結果は未加工 YAML 参照行の繰り返しではなく、アセット種別とフォルダーでまとまる。
 
-## Options
+## オプション
 
 ### list
 
 ```text
---depth <n>       directory summary depth, default 2
---kind <list>     comma-separated kinds: prefab,scene,asset,cs,mat
---meta            include .meta files in body
---flat            omit directory summary
---limit <n>       max groups, default 80
+--depth <n>       ディレクトリ要約の深さ。既定は無制限
+--kind <list>     カンマ区切りの種類: prefab,scene,asset,cs,mat
+--meta            本文に .meta ファイルを含める
+--flat            ディレクトリ要約を省略
+--limit <n>       最大グループ数。既定は無制限
 ```
 
 ### read
 
 ```text
---depth <n>          hierarchy depth, default 2
---path <name/path>   only show matching object branch
---component <name>   show fields for matching component
---field-limit <n>    max fields per component, default 20
---limit <n>          max GameObjects/component matches, default 60
---full-tree          show every visible tree row without render-only folding
+--depth <n>          階層の深さ。既定は無制限
+--path <name/path>   一致するオブジェクトのブランチだけを表示
+--component <name>   一致するコンポーネントのフィールドを表示
+--field-limit <n>    コンポーネントごとの最大フィールド数。既定は無制限
+--limit <n>          最大 GameObject/コンポーネント一致数。既定は無制限
+--full-tree          レンダリング専用の折り畳みなしで表示可能なツリー行をすべて表示
 ```
 
 ### search
 
 ```text
---name <text>        match file or GameObject name
---component <text>   match component/script name
---script-path <path> match MonoBehaviour scripts under asset path
---guid <guid>        match raw Unity GUID reference
---ref <guid>         alias of --guid
+--name <text>        ファイル名または GameObject 名を検索
+--component <text>   コンポーネント/スクリプト名を検索
+--script-path <path> 指定したアセットパス配下の MonoBehaviour スクリプトを検索
+--guid <guid>        未加工の Unity GUID 参照を検索
+--ref <guid>         --guid の別名
 --type <list>        prefab,scene,asset,cs,mat
---compact            one-line grouped result
---warnings <mode>    summary or detail, default summary
---limit <n>          max result files, default 80
+--compact            1 行のグループ結果を出力
+--warnings <mode>    警告出力方式: summary または detail。既定は summary
+--limit <n>          最大結果ファイル数。既定は無制限
 ```
 
 ### refs
 
 ```text
 --type <list>        prefab,scene,asset,mat,controller
---detail             print detailed matches instead of compact groups
---warnings <mode>    summary or detail, default summary
---limit <n>          max result files, default 80
+--detail             圧縮グループではなく詳細一致を出力
+--warnings <mode>    警告出力方式: summary または detail。既定は summary
+--limit <n>          最大結果ファイル数。既定は無制限
 ```
 
 ### update
 
 ```text
---check              install せず update だけ確認
+--check              インストールせず更新だけ確認
 ```
 
 ## 設計上の選択
