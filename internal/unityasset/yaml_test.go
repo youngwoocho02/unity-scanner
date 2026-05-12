@@ -160,6 +160,28 @@ func TestFieldsWithHidden(t *testing.T) {
 	}
 }
 
+func TestFieldReferencesScansFullNestedField(t *testing.T) {
+	asset, err := ParseAsset([]byte(`%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  targets:
+  - {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+  - {fileID: 1, guid: cccccccccccccccccccccccccccccccc, type: 2}
+  - {fileID: 1, guid: dddddddddddddddddddddddddddddddd, type: 2}
+  - {fileID: 1, guid: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, type: 2}
+  - {fileID: 1, guid: ffffffffffffffffffffffffffffffff, type: 2}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refs := asset.FieldReferences("ffffffffffffffffffffffffffffffff")
+	if len(refs) != 1 || refs[0].FieldName != "targets" {
+		t.Fatalf("refs=%#v", refs)
+	}
+}
+
 func TestScriptGUIDs(t *testing.T) {
 	asset, err := ParseAsset([]byte(`%YAML 1.1
 --- !u!114 &11400000

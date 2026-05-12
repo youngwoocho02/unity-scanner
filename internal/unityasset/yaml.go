@@ -53,6 +53,7 @@ type Asset struct {
 	ByID        map[string]*Object
 	ScriptIndex ScriptIndex
 	GUIDIndex   GUIDIndex
+	SourcePaths []string
 }
 
 type Object struct {
@@ -84,6 +85,12 @@ type Component struct {
 type Field struct {
 	Name  string
 	Value string
+}
+
+type FieldReference struct {
+	Object    *Object
+	FieldName string
+	Value     string
 }
 
 type ScriptIndex map[string]string
@@ -399,9 +406,16 @@ func (a *Asset) FieldsWithHidden(obj *Object, limit int) ([]Field, int) {
 			value = summarizeNested(obj.Lines, i+1)
 		}
 		value = a.ResolveReferences(value)
-		fields = append(fields, Field{Name: key, Value: value})
+		fields = append(fields, Field{Name: DisplayFieldName(key), Value: value})
 	}
 	return fields, hidden
+}
+
+func DisplayFieldName(name string) string {
+	if strings.HasPrefix(name, "<") && strings.HasSuffix(name, ">k__BackingField") {
+		return strings.TrimSuffix(strings.TrimPrefix(name, "<"), ">k__BackingField")
+	}
+	return name
 }
 
 func (a *Asset) ResolveReferences(value string) string {
@@ -432,6 +446,8 @@ func (a *Asset) ResolveReferences(value string) string {
 func summarizeNested(lines []string, start int) string {
 	const maxParts = 4
 	parts := make([]string, 0, maxParts)
+	parent := ""
+	sequenceIndex := 0
 	for i := start; i < len(lines); i++ {
 		line := lines[i]
 		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && !strings.HasPrefix(line, "  -") {
@@ -441,7 +457,17 @@ func summarizeNested(lines []string, start int) string {
 		if trim == "" {
 			continue
 		}
-		trim = strings.TrimPrefix(trim, "- ")
+		if strings.HasPrefix(trim, "- ") {
+			trim = strings.TrimPrefix(trim, "- ")
+			if parent != "" {
+				trim = fmt.Sprintf("%s[%d]: %s", parent, sequenceIndex, trim)
+				sequenceIndex++
+			}
+		} else if strings.HasSuffix(trim, ":") {
+			parent = strings.TrimSuffix(trim, ":")
+			sequenceIndex = 0
+			continue
+		}
 		trim = strings.Join(strings.Fields(trim), " ")
 		parts = append(parts, trim)
 		if len(parts) >= maxParts {
@@ -452,6 +478,132 @@ func summarizeNested(lines []string, start int) string {
 		return "<object>"
 	}
 	return strings.Join(parts, " | ")
+}
+
+func (a *Asset) SourcePrefabGUIDs() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, obj := range a.Objects {
+		if obj.Type != "PrefabInstance" {
+			continue
+		}
+		guid := readGUIDField(obj.Lines, "m_SourcePrefab")
+		if guid == "" || seen[guid] {
+			continue
+		}
+		seen[guid] = true
+		out = append(out, guid)
+	}
+	return out
+}
+
+func (a *Asset) FieldReferences(targetGUID string) []FieldReference {
+	var refs []FieldReference
+	targetGUID = strings.ToLower(targetGUID)
+	for _, obj := range a.Objects {
+		for i := 0; i < len(obj.Lines); i++ {
+			line := obj.Lines[i]
+			if !isTopLevelFieldLine(line) {
+				continue
+			}
+			trim := strings.TrimSpace(line)
+			parts := strings.SplitN(trim, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			if skipField(key) {
+				continue
+			}
+			value := strings.TrimSpace(parts[1])
+			if value == "" {
+				value = summarizeNestedForReference(obj.Lines, i+1)
+			}
+			if !containsGUID(value, targetGUID) {
+				continue
+			}
+			refs = append(refs, FieldReference{Object: obj, FieldName: DisplayFieldName(key), Value: a.ResolveReferences(value)})
+		}
+		refs = append(refs, a.prefabModificationReferences(obj, targetGUID)...)
+	}
+	return refs
+}
+
+func summarizeNestedForReference(lines []string, start int) string {
+	parts := make([]string, 0)
+	for i := start; i < len(lines); i++ {
+		line := lines[i]
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && !strings.HasPrefix(line, "  -") {
+			break
+		}
+		trim := strings.TrimSpace(line)
+		if trim != "" {
+			parts = append(parts, strings.Join(strings.Fields(trim), " "))
+		}
+	}
+	return strings.Join(parts, " | ")
+}
+
+func (a *Asset) prefabModificationReferences(obj *Object, targetGUID string) []FieldReference {
+	if obj == nil || obj.Type != "PrefabInstance" {
+		return nil
+	}
+	var refs []FieldReference
+	propertyPath := ""
+	for _, line := range obj.Lines {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "propertyPath:") {
+			propertyPath = DisplayFieldName(cleanScalar(strings.TrimSpace(strings.TrimPrefix(trim, "propertyPath:"))))
+			continue
+		}
+		if propertyPath == "" || !strings.Contains(trim, "guid:") || !containsGUID(trim, targetGUID) {
+			continue
+		}
+		refs = append(refs, FieldReference{Object: obj, FieldName: propertyPath, Value: a.ResolveReferences(trim)})
+		propertyPath = ""
+	}
+	return refs
+}
+
+func containsGUID(value, guid string) bool {
+	for _, found := range findGUIDs(value) {
+		if strings.EqualFold(found, guid) {
+			return true
+		}
+	}
+	return false
+}
+
+func BuildScriptIndexForPath(p Project, scriptPath string) (ScriptIndex, error) {
+	index := ScriptIndex{}
+	scriptPath = strings.Trim(filepath.ToSlash(scriptPath), "/")
+	if scriptPath == "" {
+		return index, nil
+	}
+	err := filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(d.Name()) && path != p.Assets {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".cs.meta") {
+			return nil
+		}
+		assetPath := p.AssetPath(strings.TrimSuffix(path, ".meta"))
+		if !strings.HasPrefix(filepath.ToSlash(assetPath), scriptPath) {
+			return nil
+		}
+		guid := ReadMetaGUID(path)
+		if guid != "" {
+			index[strings.ToLower(guid)] = assetPath
+		}
+		return nil
+	})
+	return index, err
 }
 
 func isTopLevelFieldLine(line string) bool {

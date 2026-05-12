@@ -15,9 +15,10 @@ var guidLiteralRE = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
 
 type refsOptions struct {
 	commonOptions
-	types  string
-	detail bool
-	limit  int
+	types        string
+	detail       bool
+	warningsMode string
+	limit        int
 }
 
 func refsCmd(args []string) error {
@@ -26,6 +27,7 @@ func refsCmd(args []string) error {
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.StringVar(&opts.types, "type", "", "comma-separated asset kinds")
 	fs.BoolVar(&opts.detail, "detail", false, "print detailed matches")
+	fs.StringVar(&opts.warningsMode, "warnings", "summary", "warning output: summary or detail")
 	fs.IntVar(&opts.limit, "limit", opts.limit, "max result files")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
@@ -61,13 +63,22 @@ func refsCmd(args []string) error {
 	}
 
 	searchOpts := searchOptions{
-		guid:    guid,
-		types:   opts.types,
-		compact: !opts.detail,
-		limit:   opts.limit,
+		guid:         guid,
+		types:        opts.types,
+		compact:      !opts.detail,
+		warningsMode: opts.warningsMode,
+		limit:        opts.limit,
+		refDetail:    opts.detail,
 	}
 	_, searchOpts.rootPath, _ = project.Resolve(scanPath)
-	matches, warnings := runSearch(project, result.Files, unityasset.ScriptIndex{}, searchOpts)
+	scripts := unityasset.ScriptIndex{}
+	if opts.detail {
+		scripts, err = unityasset.BuildScriptIndex(project)
+		if err != nil {
+			return err
+		}
+	}
+	matches, warnings := runSearch(project, result.Files, scripts, searchOpts)
 
 	fmt.Printf("REF     %s\n", label)
 	fmt.Printf("GUID    %s\n\n", guid)

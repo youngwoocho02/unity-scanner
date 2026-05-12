@@ -73,6 +73,13 @@ func readCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	if sourceGUIDs := sourceGUIDSet(asset.SourcePrefabGUIDs()); len(sourceGUIDs) > 0 {
+		index, err := unityasset.BuildGUIDIndexForGUIDs(project, sourceGUIDs)
+		if err != nil {
+			return err
+		}
+		asset.SourcePaths = sourcePaths(asset.SourcePrefabGUIDs(), index)
+	}
 	scripts, err := unityasset.BuildScriptIndexForGUIDs(project, asset.ScriptGUIDs())
 	if err != nil {
 		return err
@@ -153,6 +160,9 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 	fmt.Printf("PATH        %s\n", asset.Path)
 	if asset.GUID != "" {
 		fmt.Printf("GUID        %s\n", asset.GUID)
+	}
+	if len(asset.SourcePaths) > 0 {
+		fmt.Printf("PREFAB_SOURCES %s\n", strings.Join(asset.SourcePaths, ", "))
 	}
 	if len(flat) == 0 {
 		fmt.Printf("YAML_OBJECTS %d\n", len(asset.Objects))
@@ -526,10 +536,44 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 	if matches == 0 {
 		fmt.Printf("no component matched %q\n", opts.component)
 		printAvailableComponents(components)
+		printSourceHint(asset)
 	}
 	if hidden > 0 {
 		fmt.Printf("more components: %d hidden by --limit\n", hidden)
 	}
+}
+
+func sourceGUIDSet(guids []string) map[string]bool {
+	set := map[string]bool{}
+	for _, guid := range guids {
+		set[guid] = true
+	}
+	return set
+}
+
+func sourcePaths(guids []string, index unityasset.GUIDIndex) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, guid := range guids {
+		path := index[guid]
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		out = append(out, path)
+	}
+	return out
+}
+
+func printSourceHint(asset *unityasset.Asset) {
+	if len(asset.SourcePaths) == 0 {
+		return
+	}
+	fmt.Println("prefab sources:")
+	for _, path := range asset.SourcePaths {
+		fmt.Printf("  %s\n", path)
+	}
+	fmt.Println("hint: read source prefabs to inspect nested or inherited components")
 }
 
 func displayObjectName(obj *unityasset.Object) string {

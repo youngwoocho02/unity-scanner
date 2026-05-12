@@ -19,20 +19,31 @@ type searchOptions struct {
 	commonOptions
 	name         string
 	component    string
+	scriptPath   string
 	guid         string
 	ref          string
 	types        string
 	compact      bool
+	warningsMode string
 	limit        int
 	rootPath     string
 	scriptScoped bool
+	refDetail    bool
 }
 
 type searchMatch struct {
 	File        unityasset.FileEntry
 	Objects     []objectMatch
+	Refs        []refMatch
 	RawGUID     bool
 	FileNameHit bool
+}
+
+type refMatch struct {
+	Object    string
+	Component string
+	Field     string
+	Value     string
 }
 
 type searchWarning struct {
@@ -60,10 +71,12 @@ func searchCmd(args []string) error {
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.StringVar(&opts.name, "name", "", "file or GameObject name")
 	fs.StringVar(&opts.component, "component", "", "component or script name")
+	fs.StringVar(&opts.scriptPath, "script-path", "", "match MonoBehaviour scripts under asset path")
 	fs.StringVar(&opts.guid, "guid", "", "raw Unity GUID")
 	fs.StringVar(&opts.ref, "ref", "", "raw Unity GUID alias")
 	fs.StringVar(&opts.types, "type", "", "comma-separated asset kinds")
 	fs.BoolVar(&opts.compact, "compact", false, "compact output")
+	fs.StringVar(&opts.warningsMode, "warnings", "summary", "warning output: summary or detail")
 	fs.IntVar(&opts.limit, "limit", opts.limit, "max result files")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
@@ -75,8 +88,8 @@ func searchCmd(args []string) error {
 	if opts.guid == "" {
 		opts.guid = opts.ref
 	}
-	if opts.name == "" && opts.component == "" && opts.guid == "" {
-		return fmt.Errorf("search requires --name, --component, --guid, or --ref")
+	if opts.name == "" && opts.component == "" && opts.scriptPath == "" && opts.guid == "" {
+		return fmt.Errorf("search requires --name, --component, --script-path, --guid, or --ref")
 	}
 
 	target := "Assets"
@@ -98,7 +111,13 @@ func searchCmd(args []string) error {
 	}
 
 	scripts := unityasset.ScriptIndex{}
-	if opts.component != "" {
+	if opts.scriptPath != "" {
+		scripts, err = unityasset.BuildScriptIndexForPath(project, opts.scriptPath)
+		if err != nil {
+			return err
+		}
+		opts.scriptScoped = true
+	} else if opts.component != "" {
 		scripts, err = unityasset.BuildScriptIndexForQuery(project, opts.component)
 		if err != nil {
 			return err
@@ -207,11 +226,25 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 		return result
 	}
 
-	needsStructured := opts.name != "" || opts.component != ""
+	needsStructured := opts.name != "" || opts.component != "" || opts.scriptPath != "" || opts.refDetail
 	if needsStructured && unityasset.KnownUnityYAMLKind(file.Kind) {
-		asset, err := unityasset.ReadAssetSummary(file, scripts)
+		var asset *unityasset.Asset
+		var err error
+		if opts.refDetail {
+			asset, err = unityasset.ReadAsset(file, scripts)
+			if err == nil {
+				asset.GUIDIndex, err = unityasset.BuildGUIDIndexForGUIDs(project, map[string]bool{opts.guid: true})
+			}
+		} else {
+			asset, err = unityasset.ReadAssetSummary(file, scripts)
+		}
 		if err == nil {
-			result.Match.Objects = objectMatches(asset, opts)
+			if opts.name != "" || opts.component != "" || opts.scriptPath != "" {
+				result.Match.Objects = objectMatches(asset, opts)
+			}
+			if opts.refDetail && result.Match.RawGUID {
+				result.Match.Refs = referenceMatches(asset, opts.guid)
+			}
 		} else {
 			result.Warnings = append(result.Warnings, searchWarning{Path: file.AssetPath, Err: err})
 		}
@@ -227,7 +260,7 @@ func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
 		nameOK := opts.name == "" || containsFold(node.GameObject.Name, opts.name)
 		components := asset.ComponentsFor(node.GameObject.ID)
 		componentNames := make([]string, 0, len(components))
-		componentOK := opts.component == ""
+		componentOK := opts.component == "" && opts.scriptPath == ""
 		for _, component := range components {
 			componentNames = append(componentNames, component.Name)
 			if componentMatches(component, opts) {
@@ -242,7 +275,7 @@ func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
 		for _, obj := range asset.Objects {
 			name, scriptPath := asset.ComponentName(obj)
 			nameOK := opts.name == "" || containsFold(obj.Name, opts.name) || containsFold(name, opts.name) || containsFold(scriptPath, opts.name)
-			componentOK := opts.component == "" || componentObjectMatches(obj, name, scriptPath, opts)
+			componentOK := (opts.component == "" && opts.scriptPath == "") || componentObjectMatches(obj, name, scriptPath, opts)
 			if nameOK && componentOK {
 				label := obj.Name
 				if label == "" {
@@ -256,6 +289,9 @@ func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
 }
 
 func componentMatches(component unityasset.Component, opts searchOptions) bool {
+	if opts.scriptPath != "" {
+		return pathUnder(component.ScriptPath, opts.scriptPath)
+	}
 	if opts.component == "" {
 		return true
 	}
@@ -266,6 +302,9 @@ func componentMatches(component unityasset.Component, opts searchOptions) bool {
 }
 
 func componentObjectMatches(obj *unityasset.Object, name, scriptPath string, opts searchOptions) bool {
+	if opts.scriptPath != "" {
+		return pathUnder(scriptPath, opts.scriptPath)
+	}
 	if opts.component == "" {
 		return true
 	}
@@ -273,6 +312,39 @@ func componentObjectMatches(obj *unityasset.Object, name, scriptPath string, opt
 		return false
 	}
 	return containsFold(name, opts.component) || containsFold(scriptPath, opts.component)
+}
+
+func filepathSlash(path string) string {
+	return strings.Trim(strings.ReplaceAll(path, "\\", "/"), "/")
+}
+
+func pathUnder(path, root string) bool {
+	path = filepathSlash(path)
+	root = filepathSlash(root)
+	return path == root || strings.HasPrefix(path, root+"/")
+}
+
+func referenceMatches(asset *unityasset.Asset, guid string) []refMatch {
+	var out []refMatch
+	for _, ref := range asset.FieldReferences(guid) {
+		component, objectPath := componentAndObjectPath(asset, ref.Object)
+		out = append(out, refMatch{Object: objectPath, Component: component, Field: ref.FieldName, Value: ref.Value})
+	}
+	return out
+}
+
+func componentAndObjectPath(asset *unityasset.Asset, obj *unityasset.Object) (string, string) {
+	name, _ := asset.ComponentName(obj)
+	if obj == nil {
+		return name, ""
+	}
+	if obj.GameObjectID != "" {
+		return name, asset.ObjectPath(obj.GameObjectID)
+	}
+	if obj.Name != "" {
+		return name, obj.Name
+	}
+	return name, fmt.Sprintf("object %s", obj.ID)
 }
 
 func printSearch(matches []searchMatch, kindCounts map[string]int, opts searchOptions, warnings []searchWarning) {
@@ -289,7 +361,7 @@ func printSearch(matches []searchMatch, kindCounts map[string]int, opts searchOp
 
 	if opts.compact {
 		printSearchCompact(matches[:opts.limit], opts.rootPath)
-		printSearchWarnings(warnings)
+		printSearchWarnings(warnings, opts.warningsMode)
 		return
 	}
 
@@ -297,7 +369,7 @@ func printSearch(matches []searchMatch, kindCounts map[string]int, opts searchOp
 	if len(matches) > opts.limit {
 		fmt.Printf("\nmore: %d hidden by --limit\n", len(matches)-opts.limit)
 	}
-	printSearchWarnings(warnings)
+	printSearchWarnings(warnings, opts.warningsMode)
 }
 
 func printSearchDetailed(matches []searchMatch, opts searchOptions) {
@@ -338,6 +410,18 @@ func printSearchMatch(match searchMatch) {
 	}
 	if match.RawGUID {
 		fmt.Println("    guid-reference")
+	}
+	for _, ref := range match.Refs {
+		if ref.Object != "" {
+			fmt.Printf("    object: %s\n", ref.Object)
+		}
+		if ref.Component != "" {
+			fmt.Printf("    component: %s\n", ref.Component)
+		}
+		fmt.Printf("    field: %s\n", ref.Field)
+		if ref.Value != "" {
+			fmt.Printf("    value: %s\n", ref.Value)
+		}
 	}
 	objectLimit := len(match.Objects)
 	if objectLimit > 12 {
@@ -388,8 +472,25 @@ func printSearchCompact(matches []searchMatch, rootPath string) {
 	}
 }
 
-func printSearchWarnings(warnings []searchWarning) {
+func printSearchWarnings(warnings []searchWarning, mode string) {
 	if len(warnings) == 0 {
+		return
+	}
+	if mode != "detail" {
+		counts := map[string]int{}
+		for _, warning := range warnings {
+			counts[warning.Err.Error()]++
+		}
+		fmt.Printf("\nwarnings: %d skipped\n", len(warnings))
+		keys := make([]string, 0, len(counts))
+		for key := range counts {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			fmt.Printf("  %s: %d\n", key, counts[key])
+		}
+		fmt.Println("hint: use --warnings detail")
 		return
 	}
 	fmt.Printf("\nwarnings: %d files skipped or failed\n", len(warnings))

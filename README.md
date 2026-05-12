@@ -400,10 +400,12 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 ```text
 --name <text>        match file or GameObject name
 --component <text>   match component/script name
+--script-path <path> match MonoBehaviour scripts under asset path
 --guid <guid>        match raw Unity GUID reference
 --ref <guid>         alias of --guid
 --type <list>        prefab,scene,asset,cs,mat
 --compact            one-line grouped result
+--warnings <mode>    summary or detail, default summary
 --limit <n>          max result files, default 80
 ```
 
@@ -412,6 +414,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 ```text
 --type <list>        prefab,scene,asset,mat,controller
 --detail             print detailed matches instead of compact groups
+--warnings <mode>    summary or detail, default summary
 --limit <n>          max result files, default 80
 ```
 

@@ -285,6 +285,78 @@ Transform:
 	}
 }
 
+func TestSearchCmdMatchesScriptPath(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "Domain", "CookStation", "StationHandler.cs.meta"), "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "Domain", "CookStationExtra", "ExtraHandler.cs.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "Other", "OtherHandler.cs.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Station.prefab"), `%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: 300}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+`)
+	writeTestFile(t, filepath.Join(assets, "Extra.prefab"), `%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  - component: {fileID: 300}
+  m_Name: ExtraRoot
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: cccccccccccccccccccccccccccccccc, type: 3}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := searchCmd([]string{"-p", dir, "Assets", "--script-path", "Assets/Scripts/Domain/CookStation", "--type", "prefab"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "StationHandler") || !strings.Contains(out, "Root") {
+		t.Fatalf("script-path result missing:\n%s", out)
+	}
+	if strings.Contains(out, "ExtraHandler") || strings.Contains(out, "ExtraRoot") {
+		t.Fatalf("script-path matched sibling prefix:\n%s", out)
+	}
+}
+
+func TestPrintSearchWarningsSummary(t *testing.T) {
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	printSearchWarnings([]searchWarning{
+		{Path: "A.asset", Err: fmt.Errorf("no Unity YAML objects found")},
+		{Path: "B.asset", Err: fmt.Errorf("no Unity YAML objects found")},
+	}, "summary")
+	restoreStdout()
+	out := buf.String()
+	if !strings.Contains(out, "warnings: 2 skipped") || !strings.Contains(out, "no Unity YAML objects found: 2") {
+		t.Fatalf("summary missing:\n%s", out)
+	}
+	if strings.Contains(out, "A.asset") {
+		t.Fatalf("summary leaked detail:\n%s", out)
+	}
+}
+
 func TestRunSearchParallelKeepsOrderAndWarnings(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")
