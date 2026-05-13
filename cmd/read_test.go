@@ -306,6 +306,41 @@ MonoBehaviour:
 	}
 }
 
+func TestReadCmdFocusesLocalID(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Item.prefab"), `%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Name: Controller
+  target: {fileID: 200}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Item.prefab", "--id", "300"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "ID          300") ||
+		!strings.Contains(out, "OBJECT      Root") ||
+		!strings.Contains(out, "target                   {fileID: 200} -> Transform on Root") {
+		t.Fatalf("local id read missing:\n%s", out)
+	}
+}
+
 func TestReadCmdOmitsPrefabSourcesForSceneAndComponentMatch(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")

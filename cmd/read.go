@@ -16,6 +16,7 @@ type readOptions struct {
 	depth          int
 	path           string
 	component      string
+	localID        string
 	fieldLimit     int
 	limit          int
 	fullTree       bool
@@ -31,6 +32,7 @@ func readCmd(args []string) error {
 	fs.IntVar(&opts.depth, "depth", opts.depth, "hierarchy depth")
 	fs.StringVar(&opts.path, "path", "", "object path/name filter")
 	fs.StringVar(&opts.component, "component", "", "component filter")
+	fs.StringVar(&opts.localID, "id", "", "local YAML fileID focus")
 	fs.IntVar(&opts.fieldLimit, "field-limit", opts.fieldLimit, "field limit")
 	fs.IntVar(&opts.limit, "limit", opts.limit, "max GameObjects")
 	fs.BoolVar(&opts.fullTree, "full-tree", false, "show every visible tree row without render-only folding")
@@ -132,7 +134,11 @@ func readCmd(args []string) error {
 		}
 	}
 	profile.mark("resolve_field_guids")
-	printRead(asset, roots, flat, components, opts)
+	if opts.localID != "" {
+		printLocalIDRead(asset, opts.localID, opts)
+	} else {
+		printRead(asset, roots, flat, components, opts)
+	}
 	profile.mark("print")
 	profile.print()
 	return nil
@@ -225,6 +231,59 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 
 	printHierarchy(roots, components, opts)
 	printPrefabOverrides(asset, opts)
+}
+
+func printLocalIDRead(asset *unityasset.Asset, id string, opts readOptions) {
+	obj := asset.ByID[id]
+	if obj == nil {
+		fmt.Printf("ID          %s\n", id)
+		fmt.Println("MATCH       <none>")
+		return
+	}
+	name, scriptPath := asset.ComponentName(obj)
+	fmt.Printf("ASSET       %s\n", asset.Kind)
+	fmt.Printf("PATH        %s\n", asset.Path)
+	fmt.Printf("ID          %s\n", obj.ID)
+	fmt.Printf("TYPE        %s\n", name)
+	if obj.Name != "" {
+		fmt.Printf("NAME        %s\n", obj.Name)
+	}
+	if obj.Type == "GameObject" {
+		path := asset.ObjectPath(obj.ID)
+		if path != "" {
+			fmt.Printf("OBJECT      %s\n", path)
+		}
+		components := asset.ComponentsFor(obj.ID)
+		if len(components) > 0 {
+			names := make([]string, 0, len(components))
+			for _, component := range components {
+				names = append(names, component.Name)
+			}
+			printfLineLimited(opts.lineWidth, "COMPONENTS   %s", strings.Join(names, ", "))
+		}
+		return
+	}
+	if obj.GameObjectID != "" {
+		path := asset.ObjectPath(obj.GameObjectID)
+		if path != "" {
+			fmt.Printf("OBJECT      %s\n", path)
+		}
+	}
+	if scriptPath != "" {
+		fmt.Printf("SCRIPT      %s\n", scriptPath)
+	}
+	fields, hidden := asset.FieldsWithHidden(obj, opts.fieldLimit)
+	if len(fields) == 0 {
+		fmt.Println("FIELDS      <none>")
+		return
+	}
+	fmt.Println("FIELDS")
+	for _, field := range fields {
+		printfLineLimited(opts.lineWidth, "  %-24s %s", field.Name, field.Value)
+	}
+	if hidden > 0 {
+		fmt.Printf("more fields: %d hidden by --field-limit\n", hidden)
+	}
 }
 
 func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {

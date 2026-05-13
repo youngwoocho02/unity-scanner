@@ -273,6 +273,7 @@ Options:
   --depth <n>          hierarchy depth, default unlimited
   --path <name/path>   only show matching object branch
   --component <name>   show fields for matching component
+  --id <fileID>        focus a local YAML object/component by fileID
   --field-limit <n>    max fields per component, default unlimited
   --limit <n>          max GameObjects/component matches, default unlimited
   --full-tree          show every visible tree row without render-only folding

@@ -393,6 +393,7 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --depth <n>          계층 깊이, 기본 무제한
 --path <name/path>   일치하는 오브젝트 브랜치만 표시
 --component <name>   일치하는 컴포넌트의 필드 표시
+--id <fileID>        로컬 YAML object/component fileID 집중 조회
 --field-limit <n>    컴포넌트별 최대 필드 수, 기본 무제한
 --limit <n>          최대 GameObject/컴포넌트 매치 수, 기본 무제한
 --full-tree          렌더 전용 접기 없이 보이는 트리 행 전부 표시
