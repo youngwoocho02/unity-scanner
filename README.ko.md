@@ -400,6 +400,7 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --override <text>    지정 텍스트와 맞는 prefab override만 표시
 --override-limit <n> 최대 prefab override 표시 수, 기본 40, 0은 무제한
 --raw-overrides      prefab override 원문 target 참조 표시
+--ref-format <mode>  필드 참조 표시 방식: name, path, raw. 기본 name
 --no-resolve         script, GUID, source prefab 경로 해석 생략
 ```
 

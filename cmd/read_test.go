@@ -191,11 +191,38 @@ MonoBehaviour:
 	for _, want := range []string{
 		"ASSET       asset",
 		"script: Assets/Scripts/ConfigAsset.cs",
-		"target                   {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2} -> Assets/Data/Target.asset",
+		"target                   Target",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
+	}
+	for _, blocked := range []string{"{fileID:", "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "Assets/Data/Target.asset"} {
+		if strings.Contains(out, blocked) {
+			t.Fatalf("default reference output leaked %q:\n%s", blocked, out)
+		}
+	}
+
+	var pathBuf bytes.Buffer
+	restoreStdout = captureStdout(&pathBuf)
+	err = readCmd([]string{"-p", dir, "Assets/Config.asset", "--field-limit", "10", "--ref-format", "path"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(pathBuf.String(), "target                   Assets/Data/Target.asset") {
+		t.Fatalf("path reference output missing:\n%s", pathBuf.String())
+	}
+
+	var rawBuf bytes.Buffer
+	restoreStdout = captureStdout(&rawBuf)
+	err = readCmd([]string{"-p", dir, "Assets/Config.asset", "--field-limit", "10", "--ref-format", "raw"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rawBuf.String(), "target                   {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2} -> Assets/Data/Target.asset") {
+		t.Fatalf("raw reference output missing:\n%s", rawBuf.String())
 	}
 	if strings.Contains(out, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ->") {
 		t.Fatalf("script guid was resolved as field ref:\n%s", out)
@@ -336,7 +363,7 @@ MonoBehaviour:
 	out := buf.String()
 	if !strings.Contains(out, "ID          300") ||
 		!strings.Contains(out, "OBJECT      Root") ||
-		!strings.Contains(out, "target                   {fileID: 200} -> Transform on Root") {
+		!strings.Contains(out, "target                   Transform on Root") {
 		t.Fatalf("local id read missing:\n%s", out)
 	}
 }
@@ -628,7 +655,7 @@ MonoBehaviour:
 	}
 	out := buf.String()
 	if !strings.Contains(out, "COMPONENT  TargetComponent") ||
-		!strings.Contains(out, "-> Assets/Data/Target.asset") {
+		!strings.Contains(out, "target                   Target") {
 		t.Fatalf("target component not resolved:\n%s", out)
 	}
 	if strings.Contains(out, "OtherComponent") || strings.Contains(out, "Assets/Data/Other.asset") {

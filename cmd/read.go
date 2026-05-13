@@ -23,11 +23,12 @@ type readOptions struct {
 	overrideFilter string
 	overrideLimit  int
 	rawOverrides   bool
+	refFormat      string
 	noResolve      bool
 }
 
 func readCmd(args []string) error {
-	opts := readOptions{depth: -1, overrideLimit: 40}
+	opts := readOptions{depth: -1, overrideLimit: 40, refFormat: "name"}
 	fs := flag.NewFlagSet("read", flag.ContinueOnError)
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.IntVar(&opts.depth, "depth", opts.depth, "hierarchy depth")
@@ -40,6 +41,7 @@ func readCmd(args []string) error {
 	fs.StringVar(&opts.overrideFilter, "override", "", "prefab override filter")
 	fs.IntVar(&opts.overrideLimit, "override-limit", opts.overrideLimit, "max prefab overrides shown, 0 for unlimited")
 	fs.BoolVar(&opts.rawOverrides, "raw-overrides", false, "show raw prefab override target references")
+	fs.StringVar(&opts.refFormat, "ref-format", opts.refFormat, "field reference format: name, path, or raw")
 	fs.BoolVar(&opts.noResolve, "no-resolve", false, "skip script, GUID, and source prefab path resolution")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
@@ -50,6 +52,9 @@ func readCmd(args []string) error {
 	}
 	if fs.NArg() == 0 {
 		return fmt.Errorf("read requires an asset path")
+	}
+	if !validReadRefFormat(opts.refFormat) {
+		return fmt.Errorf("invalid --ref-format %q: use name, path, or raw", opts.refFormat)
 	}
 
 	profile := newCommandProfile(opts.profile)
@@ -89,6 +94,7 @@ func readCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	asset.RefFormat = opts.refFormat
 	profile.mark("read_asset")
 
 	sourceGUIDs := []string(nil)
@@ -199,6 +205,15 @@ func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, comp
 func addObjectVisibleFieldGUIDs(guids map[string]bool, objects []*unityasset.Object, limit int) {
 	for _, obj := range objects {
 		unityasset.AddVisibleFieldGUIDs(guids, obj, limit)
+	}
+}
+
+func validReadRefFormat(format string) bool {
+	switch format {
+	case "name", "path", "raw":
+		return true
+	default:
+		return false
 	}
 }
 

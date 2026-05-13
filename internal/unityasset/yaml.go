@@ -58,6 +58,7 @@ type Asset struct {
 	ScriptIndex ScriptIndex
 	GUIDIndex   GUIDIndex
 	SourcePaths []string
+	RefFormat   string
 }
 
 type Object struct {
@@ -444,7 +445,8 @@ func DisplayFieldName(name string) string {
 
 func (a *Asset) ResolveReferences(value string) string {
 	guids := findGUIDs(value)
-	paths := make([]string, 0, len(guids))
+	refs := make([]string, 0, len(guids))
+	rawRefs := make([]string, 0, len(guids))
 	seen := map[string]bool{}
 	if len(a.GUIDIndex) > 0 {
 		for _, guid := range guids {
@@ -453,21 +455,40 @@ func (a *Asset) ResolveReferences(value string) string {
 				continue
 			}
 			seen[path] = true
-			paths = append(paths, path)
+			refs = append(refs, a.formatReferencePath(path))
+			rawRefs = append(rawRefs, path)
 		}
 	}
-	for _, fileID := range findFileIDs(value) {
-		label := a.LocalReferenceLabel(fileID)
-		if label == "" || seen[label] {
-			continue
+	if len(guids) == 0 {
+		for _, fileID := range findFileIDs(value) {
+			label := a.LocalReferenceLabel(fileID)
+			if label == "" || seen[label] {
+				continue
+			}
+			seen[label] = true
+			refs = append(refs, label)
+			rawRefs = append(rawRefs, label)
 		}
-		seen[label] = true
-		paths = append(paths, label)
 	}
-	if len(paths) == 0 {
+	if len(refs) == 0 {
 		return value
 	}
-	return value + " -> " + strings.Join(paths, ", ")
+	if a.RefFormat == "name" || a.RefFormat == "path" {
+		return strings.Join(refs, ", ")
+	}
+	return value + " -> " + strings.Join(rawRefs, ", ")
+}
+
+func (a *Asset) formatReferencePath(path string) string {
+	if a.RefFormat == "path" {
+		return path
+	}
+	name := filepath.Base(filepath.ToSlash(path))
+	ext := filepath.Ext(name)
+	if ext != "" {
+		name = strings.TrimSuffix(name, ext)
+	}
+	return name
 }
 
 func (a *Asset) LocalReferenceLabel(fileID string) string {
