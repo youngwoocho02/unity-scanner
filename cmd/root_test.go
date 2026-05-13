@@ -50,7 +50,7 @@ func TestTopicHelpIncludesCommonFlagsAndExamples(t *testing.T) {
 		want []string
 	}{
 		{[]string{"help", "list"}, []string{"Usage:\n  unity-scanner list", "Aliases:\n  ls", "-p, --project <path>", "unity-scanner ls -p ."}},
-		{[]string{"read", "--help"}, []string{"Usage:\n  unity-scanner read", "Aliases:\n  cat", "--full-tree", "unity-scanner cat -p ."}},
+		{[]string{"read", "--help"}, []string{"Usage:\n  unity-scanner read", "Aliases:\n  cat", "--full-tree", "Details:", "SOURCE_MATCHES", "--ref-format path", "unity-scanner cat -p ."}},
 		{[]string{"search", "Assets", "--help"}, []string{"Usage:\n  unity-scanner search", "Aliases:\n  find", "--ref <guid>", "unity-scanner find -p ."}},
 		{[]string{"refs", "-h"}, []string{"Usage:\n  unity-scanner refs", "-p, --project <path>", "--detail", "0123456789abcdef0123456789abcdef"}},
 		{[]string{"update", "--help"}, []string{"Usage:\n  unity-scanner update", "-h, --help", "--check", "unity-scanner update --check"}},

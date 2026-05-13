@@ -283,9 +283,21 @@ Options:
   --ref-format <mode>  field reference format: name, path, or raw, default name
   --no-resolve         skip script, GUID, and source prefab path resolution
 
+Details:
+  Default read output favors names over raw Unity ids.
+  Use --ref-format path when the asset location matters.
+  Use --ref-format raw when fileID/guid/type values are needed.
+  Prefab overrides hide raw targets by default; use --raw-overrides for exact target refs.
+  For prefab variants, --component first checks local YAML.
+  If no local component matches, it searches source prefabs and prints SOURCE_MATCHES.
+  Non-prefab nested sources such as FBX files are skipped.
+  Use --no-resolve when you need raw local YAML only.
+  Use --profile to see where a slow command spends time.
+
 Examples:
   unity-scanner read -p . Assets/Scenes/Main.unity --depth 3
   unity-scanner cat -p . Assets/Prefabs/Hero.prefab --component MeshRenderer
+  unity-scanner read -p . Assets/Prefabs/Hero.prefab --component BoxCollider --ref-format path
 `)
 	case "search", "find":
 		fmt.Fprint(w, `Usage:
