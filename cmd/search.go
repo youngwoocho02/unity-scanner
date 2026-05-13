@@ -139,15 +139,10 @@ func searchCmd(args []string) error {
 		opts.scriptScoped = true
 	}
 	profile.mark("build_script_index")
-	sourceIndexFromFiles := false
 	if opts.source != "" {
-		opts.sourceIndex = buildSourceIndexFromFiles(result.Files, opts.source)
-		sourceIndexFromFiles = len(opts.sourceIndex) > 0
-		if !sourceIndexFromFiles {
-			opts.sourceIndex, err = unityasset.BuildGUIDIndexForPathQuery(project, opts.source)
-			if err != nil {
-				return err
-			}
+		opts.sourceIndex, err = buildPrefabSourceIndex(project, opts.source, opts.workers)
+		if err != nil {
+			return err
 		}
 		opts.sourceGUIDs = guidSetFromIndex(opts.sourceIndex)
 	}
@@ -156,16 +151,6 @@ func searchCmd(args []string) error {
 	_, opts.rootPath, _ = project.Resolve(target)
 	matches, warnings := runSearch(project, result.Files, scripts, opts)
 	profile.mark("search_files")
-	if opts.source != "" && sourceIndexFromFiles && len(matches) == 0 {
-		opts.sourceIndex, err = unityasset.BuildGUIDIndexForPathQuery(project, opts.source)
-		if err != nil {
-			return err
-		}
-		opts.sourceGUIDs = guidSetFromIndex(opts.sourceIndex)
-		profile.mark("build_source_fallback")
-		matches, warnings = runSearch(project, result.Files, scripts, opts)
-		profile.mark("search_files_fallback")
-	}
 	printSearch(matches, result.KindCount, opts, warnings)
 	profile.mark("print")
 	profile.print()
@@ -341,9 +326,16 @@ func guidSetFromIndex(index unityasset.GUIDIndex) map[string]bool {
 	return out
 }
 
-func buildSourceIndexFromFiles(files []unityasset.FileEntry, query string) unityasset.GUIDIndex {
+func buildPrefabSourceIndex(project unityasset.Project, query string, workers int) (unityasset.GUIDIndex, error) {
+	result, err := unityasset.Scan(project, "Assets", unityasset.ScanOptions{
+		Kinds:   unityasset.ParseKindSet("prefab"),
+		Workers: workers,
+	})
+	if err != nil {
+		return nil, err
+	}
 	index := unityasset.GUIDIndex{}
-	for _, file := range files {
+	for _, file := range result.Files {
 		if file.IsMeta || !containsFold(file.AssetPath, query) {
 			continue
 		}
@@ -352,7 +344,7 @@ func buildSourceIndexFromFiles(files []unityasset.FileEntry, query string) unity
 			index[strings.ToLower(guid)] = file.AssetPath
 		}
 	}
-	return index
+	return index, nil
 }
 
 func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {

@@ -885,38 +885,6 @@ func BuildGUIDIndex(p Project) (GUIDIndex, error) {
 	return BuildGUIDIndexForGUIDs(p, nil)
 }
 
-func BuildGUIDIndexForPathQuery(p Project, query string) (GUIDIndex, error) {
-	index := GUIDIndex{}
-	query = strings.ToLower(strings.TrimSpace(filepath.ToSlash(query)))
-	if query == "" {
-		return index, nil
-	}
-	err := filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if shouldSkipDir(d.Name()) && path != p.Assets {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".meta") {
-			return nil
-		}
-		assetPath := p.AssetPath(strings.TrimSuffix(path, ".meta"))
-		if !containsLower(filepath.ToSlash(assetPath), query) {
-			return nil
-		}
-		guid := ReadMetaGUID(path)
-		if guid != "" {
-			index[strings.ToLower(guid)] = assetPath
-		}
-		return nil
-	})
-	return index, err
-}
-
 func BuildGUIDIndexForGUIDs(p Project, wanted map[string]bool) (GUIDIndex, error) {
 	index := GUIDIndex{}
 	if wanted != nil && len(wanted) == 0 {
