@@ -33,6 +33,7 @@ type searchOptions struct {
 	refDetail    bool
 	guidIndex    unityasset.GUIDIndex
 	sourceIndex  unityasset.GUIDIndex
+	sourceGUIDs  map[string]bool
 }
 
 type searchMatch struct {
@@ -130,7 +131,7 @@ func searchCmd(args []string) error {
 			return err
 		}
 		opts.scriptScoped = true
-	} else if opts.component != "" {
+	} else if opts.component != "" && !unityasset.MatchesNativeClassName(opts.component) {
 		scripts, err = unityasset.BuildScriptIndexForQuery(project, opts.component)
 		if err != nil {
 			return err
@@ -138,17 +139,33 @@ func searchCmd(args []string) error {
 		opts.scriptScoped = true
 	}
 	profile.mark("build_script_index")
+	sourceIndexFromFiles := false
 	if opts.source != "" {
-		opts.sourceIndex, err = unityasset.BuildGUIDIndex(project)
-		if err != nil {
-			return err
+		opts.sourceIndex = buildSourceIndexFromFiles(result.Files, opts.source)
+		sourceIndexFromFiles = len(opts.sourceIndex) > 0
+		if !sourceIndexFromFiles {
+			opts.sourceIndex, err = unityasset.BuildGUIDIndexForPathQuery(project, opts.source)
+			if err != nil {
+				return err
+			}
 		}
+		opts.sourceGUIDs = guidSetFromIndex(opts.sourceIndex)
 	}
 	profile.mark("build_source_index")
 
 	_, opts.rootPath, _ = project.Resolve(target)
 	matches, warnings := runSearch(project, result.Files, scripts, opts)
 	profile.mark("search_files")
+	if opts.source != "" && sourceIndexFromFiles && len(matches) == 0 {
+		opts.sourceIndex, err = unityasset.BuildGUIDIndexForPathQuery(project, opts.source)
+		if err != nil {
+			return err
+		}
+		opts.sourceGUIDs = guidSetFromIndex(opts.sourceIndex)
+		profile.mark("build_source_fallback")
+		matches, warnings = runSearch(project, result.Files, scripts, opts)
+		profile.mark("search_files_fallback")
+	}
 	printSearch(matches, result.KindCount, opts, warnings)
 	profile.mark("print")
 	profile.print()
@@ -183,8 +200,9 @@ func runSearch(project unityasset.Project, files []unityasset.FileEntry, scripts
 		go func() {
 			defer wg.Done()
 			guidSearcher := makeTextSearcher(opts.guid)
+			sourceSearcher := makeMultiTextSearcher(opts.sourceGUIDs)
 			for index := range jobs {
-				result := searchOneFile(project, index, files[index], scripts, opts, &guidSearcher)
+				result := searchOneFile(project, index, files[index], scripts, opts, &guidSearcher, sourceSearcher)
 				if result.Matched || len(result.Warnings) > 0 {
 					results <- result
 				}
@@ -224,8 +242,9 @@ func runSearchSerial(project unityasset.Project, files []unityasset.FileEntry, s
 	matches := make([]searchMatch, 0)
 	warnings := make([]searchWarning, 0)
 	guidSearcher := makeTextSearcher(opts.guid)
+	sourceSearcher := makeMultiTextSearcher(opts.sourceGUIDs)
 	for i, file := range files {
-		result := searchOneFile(project, i, file, scripts, opts, &guidSearcher)
+		result := searchOneFile(project, i, file, scripts, opts, &guidSearcher, sourceSearcher)
 		warnings = append(warnings, result.Warnings...)
 		if result.Matched {
 			matches = append(matches, result.Match)
@@ -234,7 +253,7 @@ func runSearchSerial(project unityasset.Project, files []unityasset.FileEntry, s
 	return matches, warnings
 }
 
-func searchOneFile(project unityasset.Project, index int, file unityasset.FileEntry, scripts unityasset.ScriptIndex, opts searchOptions, guidSearcher *textSearcher) searchFileResult {
+func searchOneFile(project unityasset.Project, index int, file unityasset.FileEntry, scripts unityasset.ScriptIndex, opts searchOptions, guidSearcher *textSearcher, sourceSearcher *multiTextSearcher) searchFileResult {
 	result := searchFileResult{Index: index, Match: searchMatch{File: file}}
 	if file.IsMeta {
 		return result
@@ -253,7 +272,15 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 		return result
 	}
 
-	needsStructured := opts.name != "" || opts.component != "" || opts.scriptPath != "" || opts.source != "" || opts.refDetail
+	sourceCandidate := true
+	if opts.source != "" {
+		var err error
+		sourceCandidate, err = sourceSearcher.contains(file)
+		if err != nil {
+			result.Warnings = append(result.Warnings, searchWarning{Path: file.AssetPath, Err: err})
+		}
+	}
+	needsStructured := opts.name != "" || opts.component != "" || opts.scriptPath != "" || (opts.source != "" && sourceCandidate) || opts.refDetail
 	if needsStructured && unityasset.KnownUnityYAMLKind(file.Kind) {
 		var asset *unityasset.Asset
 		var err error
@@ -301,6 +328,31 @@ func sourceMatches(paths []string, query string) bool {
 		}
 	}
 	return false
+}
+
+func guidSetFromIndex(index unityasset.GUIDIndex) map[string]bool {
+	if len(index) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(index))
+	for guid := range index {
+		out[strings.ToLower(guid)] = true
+	}
+	return out
+}
+
+func buildSourceIndexFromFiles(files []unityasset.FileEntry, query string) unityasset.GUIDIndex {
+	index := unityasset.GUIDIndex{}
+	for _, file := range files {
+		if file.IsMeta || !containsFold(file.AssetPath, query) {
+			continue
+		}
+		guid := unityasset.ReadMetaGUID(file.Abs + ".meta")
+		if guid != "" {
+			index[strings.ToLower(guid)] = file.AssetPath
+		}
+	}
+	return index
 }
 
 func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
@@ -588,8 +640,36 @@ type textSearcher struct {
 	bridge []byte
 }
 
+type multiTextSearcher struct {
+	searchers []textSearcher
+}
+
 func makeTextSearcher(needle string) textSearcher {
 	return textSearcher{needle: []byte(needle)}
+}
+
+func makeMultiTextSearcher(needles map[string]bool) *multiTextSearcher {
+	if len(needles) == 0 {
+		return &multiTextSearcher{}
+	}
+	searchers := make([]textSearcher, 0, len(needles))
+	for needle := range needles {
+		searchers = append(searchers, makeTextSearcher(needle))
+	}
+	return &multiTextSearcher{searchers: searchers}
+}
+
+func (s *multiTextSearcher) contains(file unityasset.FileEntry) (bool, error) {
+	if s == nil || len(s.searchers) == 0 {
+		return false, nil
+	}
+	for i := range s.searchers {
+		ok, err := s.searchers[i].contains(file)
+		if ok || err != nil {
+			return ok, err
+		}
+	}
+	return false, nil
 }
 
 func (s *textSearcher) contains(file unityasset.FileEntry) (bool, error) {
