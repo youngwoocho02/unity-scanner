@@ -103,7 +103,7 @@ func readCmd(args []string) error {
 	if !opts.noResolve {
 		nativeComponentFilter := opts.component != "" && unityasset.MatchesNativeClassName(opts.component)
 		resolveScripts := opts.component == "" || !nativeComponentFilter
-		if entry.Kind == "prefab" && (opts.component == "" || !nativeComponentFilter) {
+		if entry.Kind == "prefab" {
 			sourceGUIDs = asset.SourcePrefabGUIDs()
 		}
 		wanted := sourceGUIDSet(sourceGUIDs)
@@ -142,10 +142,18 @@ func readCmd(args []string) error {
 		}
 	}
 	profile.mark("resolve_field_guids")
+	sourceComponents := []sourceComponentRead(nil)
+	if opts.component != "" && entry.Kind == "prefab" && !opts.noResolve && countReadMatches(asset, flat, components, opts) == 0 {
+		sourceComponents, err = collectSourceComponentReads(project, asset.SourcePaths, opts)
+		if err != nil {
+			return err
+		}
+	}
+	profile.mark("read_source_prefabs")
 	if opts.localID != "" {
 		printLocalIDRead(asset, opts.localID, opts)
 	} else {
-		printRead(asset, roots, flat, components, opts)
+		printRead(asset, roots, flat, components, sourceComponents, opts)
 	}
 	profile.mark("print")
 	profile.print()
@@ -156,6 +164,18 @@ type readComponentView struct {
 	byGO  map[string][]unityasset.Component
 	count int
 	names []string
+}
+
+type sourceComponentRead struct {
+	Path       string
+	Asset      *unityasset.Asset
+	Nodes      []*unityasset.Node
+	Components readComponentView
+}
+
+type componentReadStats struct {
+	matches int
+	hidden  int
 }
 
 func buildReadComponentView(asset *unityasset.Asset, nodes []*unityasset.Node) readComponentView {
@@ -178,6 +198,35 @@ func buildReadComponentView(asset *unityasset.Asset, nodes []*unityasset.Node) r
 
 func (v readComponentView) components(goID string) []unityasset.Component {
 	return v.byGO[goID]
+}
+
+func countComponentMatches(nodes []*unityasset.Node, components readComponentView, opts readOptions) int {
+	count := 0
+	for _, node := range nodes {
+		if opts.path != "" && !containsFold(node.Path, opts.path) {
+			continue
+		}
+		for _, component := range components.components(node.GameObject.ID) {
+			if containsFold(component.Name, opts.component) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func countReadMatches(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, opts readOptions) int {
+	if len(nodes) > 0 {
+		return countComponentMatches(nodes, components, opts)
+	}
+	count := 0
+	for _, obj := range asset.Objects {
+		name, _ := asset.ComponentName(obj)
+		if containsFold(name, opts.component) || containsFold(obj.Name, opts.component) {
+			count++
+		}
+	}
+	return count
 }
 
 func fieldReferenceGUIDs(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, opts readOptions) map[string]bool {
@@ -217,7 +266,7 @@ func validReadRefFormat(format string) bool {
 	}
 }
 
-func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unityasset.Node, components readComponentView, opts readOptions) {
+func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unityasset.Node, components readComponentView, sourceComponents []sourceComponentRead, opts readOptions) {
 	fmt.Printf("ASSET       %s\n", asset.Kind)
 	fmt.Printf("PATH        %s\n", asset.Path)
 	if asset.GUID != "" {
@@ -243,7 +292,7 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 		return
 	}
 	if opts.component != "" {
-		printComponentRead(asset, flat, components, opts)
+		printComponentRead(asset, flat, components, sourceComponents, opts)
 		return
 	}
 
@@ -722,9 +771,26 @@ func prefabOverrideMatches(override unityasset.PrefabOverride, filter string) bo
 		containsFold(override.AddedObject, filter)
 }
 
-func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, opts readOptions) {
-	matches := 0
-	hidden := 0
+func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, sourceComponents []sourceComponentRead, opts readOptions) {
+	stats := componentReadStats{}
+	printComponentMatches(asset, nodes, components, "", &stats, opts)
+	if stats.matches == 0 && len(sourceComponents) > 0 {
+		fmt.Println("SOURCE_MATCHES")
+		for _, source := range sourceComponents {
+			printComponentMatches(source.Asset, source.Nodes, source.Components, source.Path, &stats, opts)
+		}
+	}
+	if stats.matches == 0 {
+		fmt.Printf("no component matched %q\n", opts.component)
+		printAvailableComponents(components, opts.lineWidth)
+		printSourceHint(asset, opts.lineWidth)
+	}
+	if stats.hidden > 0 {
+		fmt.Printf("more components: %d hidden by --limit\n", stats.hidden)
+	}
+}
+
+func printComponentMatches(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, sourcePath string, stats *componentReadStats, opts readOptions) {
 	for _, node := range nodes {
 		if opts.path != "" && !containsFold(node.Path, opts.path) {
 			continue
@@ -733,11 +799,14 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 			if !containsFold(component.Name, opts.component) {
 				continue
 			}
-			if opts.limit > 0 && matches >= opts.limit {
-				hidden++
+			if opts.limit > 0 && stats.matches >= opts.limit {
+				stats.hidden++
 				continue
 			}
-			matches++
+			stats.matches++
+			if sourcePath != "" {
+				fmt.Printf("SOURCE     %s\n", sourcePath)
+			}
 			fmt.Printf("COMPONENT  %s\n", component.Name)
 			fmt.Printf("OBJECT     %s\n", node.Path)
 			if component.ScriptPath != "" {
@@ -758,14 +827,91 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 			fmt.Println()
 		}
 	}
-	if matches == 0 {
-		fmt.Printf("no component matched %q\n", opts.component)
-		printAvailableComponents(components, opts.lineWidth)
-		printSourceHint(asset, opts.lineWidth)
+}
+
+func collectSourceComponentReads(project unityasset.Project, sourcePaths []string, opts readOptions) ([]sourceComponentRead, error) {
+	seen := map[string]bool{}
+	queue := append([]string(nil), sourcePaths...)
+	out := []sourceComponentRead(nil)
+	for len(queue) > 0 {
+		sourcePath := queue[0]
+		queue = queue[1:]
+		if sourcePath == "" || seen[sourcePath] {
+			continue
+		}
+		seen[sourcePath] = true
+
+		source, ok, err := readSourcePrefab(project, sourcePath, opts)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		if countComponentMatches(source.Nodes, source.Components, opts) > 0 {
+			out = append(out, source)
+			continue
+		}
+		for _, next := range source.Asset.SourcePaths {
+			if !seen[next] {
+				queue = append(queue, next)
+			}
+		}
 	}
-	if hidden > 0 {
-		fmt.Printf("more components: %d hidden by --limit\n", hidden)
+	return out, nil
+}
+
+func readSourcePrefab(project unityasset.Project, sourcePath string, opts readOptions) (sourceComponentRead, bool, error) {
+	result, err := unityasset.Scan(project, sourcePath, unityasset.ScanOptions{Workers: opts.workers})
+	if err != nil {
+		return sourceComponentRead{}, false, err
 	}
+	if len(result.Files) == 0 {
+		return sourceComponentRead{}, false, fmt.Errorf("source prefab not found: %s", sourcePath)
+	}
+	entry := result.Files[0]
+	if entry.Kind != "prefab" {
+		return sourceComponentRead{}, false, nil
+	}
+	asset, err := unityasset.ReadAsset(entry, unityasset.ScriptIndex{})
+	if err != nil {
+		return sourceComponentRead{}, false, err
+	}
+	asset.RefFormat = opts.refFormat
+
+	sourceGUIDs := asset.SourcePrefabGUIDs()
+	scriptGUIDs := asset.ScriptGUIDs()
+	wanted := sourceGUIDSet(sourceGUIDs)
+	if !unityasset.MatchesNativeClassName(opts.component) {
+		addGUIDSet(wanted, scriptGUIDs)
+	}
+	resolved, err := unityasset.BuildGUIDIndexForGUIDs(project, wanted)
+	if err != nil {
+		return sourceComponentRead{}, false, err
+	}
+	asset.ScriptIndex = scriptIndexFromGUIDIndex(resolved, scriptGUIDs)
+	asset.SourcePaths = sourcePaths(sourceGUIDs, resolved)
+	asset.GUIDIndex = resolved
+
+	roots := asset.Hierarchy()
+	nodes := flattenHierarchy(roots)
+	components := buildReadComponentView(asset, nodes)
+	fieldGUIDs := fieldReferenceGUIDs(asset, nodes, components, opts)
+	removeKnownGUIDs(fieldGUIDs, resolved)
+	if len(fieldGUIDs) > 0 {
+		fieldIndex, err := unityasset.BuildGUIDIndexForGUIDs(project, fieldGUIDs)
+		if err != nil {
+			return sourceComponentRead{}, false, err
+		}
+		mergeGUIDIndex(asset.GUIDIndex, fieldIndex)
+	}
+
+	return sourceComponentRead{
+		Path:       sourcePath,
+		Asset:      asset,
+		Nodes:      nodes,
+		Components: components,
+	}, true, nil
 }
 
 func sourceGUIDSet(guids []string) map[string]bool {

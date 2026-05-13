@@ -392,7 +392,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 ```text
 --depth <n>          hierarchy depth, default unlimited
 --path <name/path>   only show matching object branch
---component <name>   show fields for matching component
+--component <name>   show fields for matching component; prefab local misses search source prefabs
 --id <fileID>        focus a local YAML object/component by fileID
 --field-limit <n>    max fields per component, default unlimited
 --limit <n>          max GameObjects/component matches, default unlimited
@@ -404,7 +404,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --no-resolve         skip script, GUID, and source prefab path resolution
 ```
 
-When `read` reports `PREFAB_SOURCES`, the view is local serialized YAML. Source or nested prefab contents are not expanded; use source prefab reads or Unity `LoadPrefabContents` for the editor-resolved state.
+When `read` reports `PREFAB_SOURCES`, the tree view is local serialized YAML. `read --component` searches source prefabs on local misses and prints `SOURCE_MATCHES`; use Unity `LoadPrefabContents` only when the fully editor-resolved prefab state matters.
 
 ### search
 

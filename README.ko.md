@@ -392,7 +392,7 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 ```text
 --depth <n>          계층 깊이, 기본 무제한
 --path <name/path>   일치하는 오브젝트 브랜치만 표시
---component <name>   일치하는 컴포넌트의 필드 표시
+--component <name>   일치하는 컴포넌트의 필드 표시. prefab 로컬 미스는 source prefab 검색
 --id <fileID>        로컬 YAML object/component fileID 집중 조회
 --field-limit <n>    컴포넌트별 최대 필드 수, 기본 무제한
 --limit <n>          최대 GameObject/컴포넌트 매치 수, 기본 무제한
@@ -404,7 +404,7 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --no-resolve         script, GUID, source prefab 경로 해석 생략
 ```
 
-`read`가 `PREFAB_SOURCES`를 표시하면 로컬 직렬화 YAML 기준이다. source/nested prefab 내용은 펼치지 않으므로 source prefab을 같이 읽거나 Unity `LoadPrefabContents`로 Editor-resolved 상태를 확정한다.
+`read`가 `PREFAB_SOURCES`를 표시하면 트리 뷰는 로컬 직렬화 YAML 기준이다. `read --component`는 로컬 미스 때 source prefab을 검색해 `SOURCE_MATCHES`를 표시한다. 완전한 Editor-resolved prefab 상태가 필요할 때만 Unity `LoadPrefabContents`로 확정한다.
 
 ### search
 

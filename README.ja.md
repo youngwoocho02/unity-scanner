@@ -392,7 +392,7 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 ```text
 --depth <n>          階層の深さ。既定は無制限
 --path <name/path>   一致するオブジェクトのブランチだけを表示
---component <name>   一致するコンポーネントのフィールドを表示
+--component <name>   一致するコンポーネントのフィールドを表示。prefab の local miss は source prefab を検索
 --id <fileID>        ローカル YAML object/component を fileID で表示
 --field-limit <n>    コンポーネントごとの最大フィールド数。既定は無制限
 --limit <n>          最大 GameObject/コンポーネント一致数。既定は無制限
@@ -404,7 +404,7 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 --no-resolve         script、GUID、source prefab path の解決を省略
 ```
 
-`read` が `PREFAB_SOURCES` を表示する場合、そのビューは local serialized YAML 基準です。source/nested prefab の内容は展開しないため、source prefab を読むか Unity `LoadPrefabContents` で editor-resolved state を確認します。
+`read` が `PREFAB_SOURCES` を表示する場合、tree view は local serialized YAML 基準です。`read --component` は local miss 時に source prefab を検索し、`SOURCE_MATCHES` を表示します。完全な editor-resolved prefab state が必要な場合だけ Unity `LoadPrefabContents` で確認します。
 
 ### search
 

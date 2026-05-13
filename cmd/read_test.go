@@ -418,7 +418,17 @@ PrefabInstance:
 func TestReadCmdShowsGroupedSourceHintForComponentMiss(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")
-	writeTestFile(t, filepath.Join(assets, "Base.prefab"), "x")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), `%YAML 1.1
+--- !u!1 &200
+GameObject:
+  m_Component:
+  - component: {fileID: 300}
+  m_Name: BaseRoot
+--- !u!4 &300
+Transform:
+  m_GameObject: {fileID: 200}
+  m_Father: {fileID: 0}
+`)
 	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
 	writeTestFile(t, filepath.Join(assets, "Variant.prefab.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
 	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
@@ -448,6 +458,75 @@ Transform:
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestReadCmdFindsSourcePrefabComponentOnLocalMiss(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "SourceConfig.cs.meta"), "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset"), "x")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset.meta"), "guid: dddddddddddddddddddddddddddddddd\n")
+	writeTestFile(t, filepath.Join(assets, "Model.fbx"), "binary")
+	writeTestFile(t, filepath.Join(assets, "Model.fbx.meta"), "guid: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, type: 3}
+--- !u!1 &200
+GameObject:
+  m_Component:
+  - component: {fileID: 300}
+  - component: {fileID: 400}
+  m_Name: BaseRoot
+--- !u!4 &300
+Transform:
+  m_GameObject: {fileID: 200}
+  m_Father: {fileID: 0}
+--- !u!114 &400
+MonoBehaviour:
+  m_GameObject: {fileID: 200}
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  target: {fileID: 11400000, guid: dddddddddddddddddddddddddddddddd, type: 2}
+`)
+	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 500}
+  m_Name: VariantRoot
+--- !u!4 &500
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--component", "SourceConfig", "--field-limit", "10"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"SOURCE_MATCHES",
+		"SOURCE     Assets/Base.prefab",
+		"COMPONENT  SourceConfig",
+		"OBJECT     BaseRoot",
+		"target                   Target",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "hint: current read is local prefab YAML") {
+		t.Fatalf("source match still printed local-only hint:\n%s", out)
 	}
 }
 

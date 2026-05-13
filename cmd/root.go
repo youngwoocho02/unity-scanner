@@ -272,7 +272,7 @@ Common:
 Options:
   --depth <n>          hierarchy depth, default unlimited
   --path <name/path>   only show matching object branch
-  --component <name>   show fields for matching component
+  --component <name>   show fields for matching component; prefab local misses search source prefabs
   --id <fileID>        focus a local YAML object/component by fileID
   --field-limit <n>    max fields per component, default unlimited
   --limit <n>          max GameObjects/component matches, default unlimited
