@@ -394,6 +394,8 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --field-limit <n>    max fields per component, default unlimited
 --limit <n>          max GameObjects/component matches, default unlimited
 --full-tree          show every visible tree row without render-only folding
+--override <text>    only show prefab overrides matching text
+--override-limit <n> max prefab overrides shown, default 40, 0 unlimited
 ```
 
 ### search

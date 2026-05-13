@@ -394,6 +394,8 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 --field-limit <n>    コンポーネントごとの最大フィールド数。既定は無制限
 --limit <n>          最大 GameObject/コンポーネント一致数。既定は無制限
 --full-tree          レンダリング専用の折り畳みなしで表示可能なツリー行をすべて表示
+--override <text>    指定テキストに一致する prefab override だけを表示
+--override-limit <n> 最大 prefab override 表示数。既定は 40、0 は無制限
 ```
 
 ### search

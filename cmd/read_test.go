@@ -387,6 +387,61 @@ BoxCollider:
 	}
 }
 
+func TestReadCmdFiltersPrefabOverridesSeparatelyFromTreeLimit(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), "x")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+      propertyPath: m_Layer
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 201, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 202, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+      propertyPath: m_Name
+      value: Hidden Root
+      objectReference: {fileID: 0}
+  m_SourcePrefab: {fileID: 100100000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--limit", "1", "--override", "m_IsActive", "--override-limit", "1"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `OVERRIDES  1 filter "m_IsActive"`) ||
+		!strings.Contains(out, "m_IsActive=0") {
+		t.Fatalf("filtered override missing:\n%s", out)
+	}
+	if strings.Contains(out, "m_Layer=2") || strings.Contains(out, "m_Name=Hidden Root") {
+		t.Fatalf("unfiltered overrides leaked:\n%s", out)
+	}
+	if strings.Contains(out, "hidden by --limit") {
+		t.Fatalf("tree limit affected override limit wording:\n%s", out)
+	}
+}
+
 func TestFieldReferenceGUIDsUnlimitedByDefault(t *testing.T) {
 	var yaml strings.Builder
 	yaml.WriteString("%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n")

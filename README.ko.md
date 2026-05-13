@@ -394,6 +394,8 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --field-limit <n>    컴포넌트별 최대 필드 수, 기본 무제한
 --limit <n>          최대 GameObject/컴포넌트 매치 수, 기본 무제한
 --full-tree          렌더 전용 접기 없이 보이는 트리 행 전부 표시
+--override <text>    지정 텍스트와 맞는 prefab override만 표시
+--override-limit <n> 최대 prefab override 표시 수, 기본 40, 0은 무제한
 ```
 
 ### search

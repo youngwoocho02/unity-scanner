@@ -13,16 +13,18 @@ import (
 
 type readOptions struct {
 	commonOptions
-	depth      int
-	path       string
-	component  string
-	fieldLimit int
-	limit      int
-	fullTree   bool
+	depth          int
+	path           string
+	component      string
+	fieldLimit     int
+	limit          int
+	fullTree       bool
+	overrideFilter string
+	overrideLimit  int
 }
 
 func readCmd(args []string) error {
-	opts := readOptions{depth: -1}
+	opts := readOptions{depth: -1, overrideLimit: 40}
 	fs := flag.NewFlagSet("read", flag.ContinueOnError)
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.IntVar(&opts.depth, "depth", opts.depth, "hierarchy depth")
@@ -31,6 +33,8 @@ func readCmd(args []string) error {
 	fs.IntVar(&opts.fieldLimit, "field-limit", opts.fieldLimit, "field limit")
 	fs.IntVar(&opts.limit, "limit", opts.limit, "max GameObjects")
 	fs.BoolVar(&opts.fullTree, "full-tree", false, "show every visible tree row without render-only folding")
+	fs.StringVar(&opts.overrideFilter, "override", "", "prefab override filter")
+	fs.IntVar(&opts.overrideLimit, "override-limit", opts.overrideLimit, "max prefab overrides shown, 0 for unlimited")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
 			printTopicHelp(os.Stdout, "read")
@@ -504,18 +508,25 @@ func printPrefabOverrides(asset *unityasset.Asset, opts readOptions) {
 	if asset.Kind != "prefab" {
 		return
 	}
-	overrides := asset.PrefabOverrides()
+	overrides := filterPrefabOverrides(asset.PrefabOverrides(), opts.overrideFilter)
 	if len(overrides) == 0 {
 		return
 	}
 	fmt.Println()
-	fmt.Println("OVERRIDES")
+	fmt.Printf("OVERRIDES  %d", len(overrides))
 	limit := len(overrides)
 	hidden := 0
-	if opts.limit > 0 && limit > opts.limit {
-		hidden = limit - opts.limit
-		limit = opts.limit
+	if opts.overrideLimit > 0 && limit > opts.overrideLimit {
+		hidden = limit - opts.overrideLimit
+		limit = opts.overrideLimit
 	}
+	if limit < len(overrides) {
+		fmt.Printf(" shown %d", limit)
+	}
+	if opts.overrideFilter != "" {
+		fmt.Printf(" filter %q", opts.overrideFilter)
+	}
+	fmt.Println()
 	for _, override := range overrides[:limit] {
 		switch override.Kind {
 		case "property":
@@ -527,8 +538,30 @@ func printPrefabOverrides(asset *unityasset.Asset, opts readOptions) {
 		}
 	}
 	if hidden > 0 {
-		fmt.Printf("  more overrides: %d hidden by --limit\n", hidden)
+		fmt.Printf("  more overrides: %d hidden by --override-limit\n", hidden)
 	}
+}
+
+func filterPrefabOverrides(overrides []unityasset.PrefabOverride, filter string) []unityasset.PrefabOverride {
+	filter = strings.TrimSpace(filter)
+	if filter == "" {
+		return overrides
+	}
+	out := make([]unityasset.PrefabOverride, 0, len(overrides))
+	for _, override := range overrides {
+		if prefabOverrideMatches(override, filter) {
+			out = append(out, override)
+		}
+	}
+	return out
+}
+
+func prefabOverrideMatches(override unityasset.PrefabOverride, filter string) bool {
+	return containsFold(override.Kind, filter) ||
+		containsFold(override.Target, filter) ||
+		containsFold(override.PropertyPath, filter) ||
+		containsFold(override.Value, filter) ||
+		containsFold(override.AddedObject, filter)
 }
 
 func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, opts readOptions) {
