@@ -48,6 +48,7 @@ type commonOptions struct {
 	project   string
 	lineWidth int
 	profile   bool
+	workers   int
 }
 
 func addCommonFlags(fs *flag.FlagSet, opts *commonOptions) {
@@ -56,6 +57,7 @@ func addCommonFlags(fs *flag.FlagSet, opts *commonOptions) {
 	fs.StringVar(&opts.project, "p", "", "Unity project path")
 	fs.IntVar(&opts.lineWidth, "line-width", opts.lineWidth, "max output line width, 0 disables truncation")
 	fs.BoolVar(&opts.profile, "profile", false, "print command timing profile")
+	fs.IntVar(&opts.workers, "workers", opts.workers, "parallel worker count, default CPU count")
 }
 
 func lineLimit(opts commonOptions) int {
@@ -214,6 +216,7 @@ Project commands:
   -p, --project <path>   Unity project path
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
   --profile              Print command timing profile
+  --workers <n>          Parallel worker count, default CPU count
 
 Examples:
   unity-scanner help read
@@ -239,6 +242,7 @@ Common:
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
   --profile              Print command timing profile
+  --workers <n>          Parallel worker count, default CPU count
 
 Options:
   --depth <n>       directory summary depth, default unlimited
@@ -263,6 +267,7 @@ Common:
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
   --profile              Print command timing profile
+  --workers <n>          Parallel worker count, default CPU count
 
 Options:
   --depth <n>          hierarchy depth, default unlimited
@@ -291,6 +296,7 @@ Common:
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
   --profile              Print command timing profile
+  --workers <n>          Parallel worker count, default CPU count
 
 Options:
   --name <text>        match file or GameObject name
@@ -317,6 +323,7 @@ Common:
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
   --profile              Print command timing profile
+  --workers <n>          Parallel worker count, default CPU count
 
 Options:
   --type <list>        prefab,scene,asset,mat,controller

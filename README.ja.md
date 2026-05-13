@@ -83,6 +83,7 @@ unity-scanner version
 -p, --project <path>   Unity プロジェクトのパス
 --line-width <n>       出力 1 行の最大幅。既定 1200、0 で切り詰め無効
 --profile              コマンドの段階別 timing profile を出力
+--workers <n>          並列 worker 数。既定は CPU 数
 ```
 
 コマンド別名: `ls` = `list`, `cat` = `read`, `find` = `search`

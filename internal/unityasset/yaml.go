@@ -653,10 +653,16 @@ func (a *Asset) FieldReferences(targetGUID string) []FieldReference {
 			}
 			value := strings.TrimSpace(parts[1])
 			if value == "" {
-				value = summarizeNestedForReference(obj.Lines, i+1)
-			}
-			if !containsGUID(value, targetGUID) {
-				continue
+				nested, ok := summarizeNestedReferenceMatch(obj.Lines, i+1, targetGUID)
+				if !ok {
+					continue
+				}
+				value = nested
+			} else {
+				if !containsGUID(value, targetGUID) {
+					continue
+				}
+				value = referenceExcerpt(value, targetGUID)
 			}
 			refs = append(refs, FieldReference{Object: obj, FieldName: DisplayFieldName(key), Value: a.ResolveReferences(value)})
 		}
@@ -665,19 +671,47 @@ func (a *Asset) FieldReferences(targetGUID string) []FieldReference {
 	return refs
 }
 
-func summarizeNestedForReference(lines []string, start int) string {
-	parts := make([]string, 0)
+func summarizeNestedReferenceMatch(lines []string, start int, targetGUID string) (string, bool) {
 	for i := start; i < len(lines); i++ {
 		line := lines[i]
 		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") && !strings.HasPrefix(line, "  -") {
 			break
 		}
 		trim := strings.TrimSpace(line)
-		if trim != "" {
-			parts = append(parts, strings.Join(strings.Fields(trim), " "))
+		if trim == "" || !containsGUID(trim, targetGUID) {
+			continue
 		}
+		return referenceExcerpt(strings.Join(strings.Fields(trim), " "), targetGUID), true
 	}
-	return strings.Join(parts, " | ")
+	return "", false
+}
+
+func referenceExcerpt(value string, targetGUID string) string {
+	const radius = 160
+	if len(value) <= radius*2 {
+		return value
+	}
+	lowerValue := strings.ToLower(value)
+	index := strings.Index(lowerValue, strings.ToLower(targetGUID))
+	if index < 0 {
+		return value[:radius*2] + "..."
+	}
+	start := index - radius
+	if start < 0 {
+		start = 0
+	}
+	end := index + len(targetGUID) + radius
+	if end > len(value) {
+		end = len(value)
+	}
+	excerpt := value[start:end]
+	if start > 0 {
+		excerpt = "..." + excerpt
+	}
+	if end < len(value) {
+		excerpt += "..."
+	}
+	return excerpt
 }
 
 func (a *Asset) prefabModificationReferences(obj *Object, targetGUID string) []FieldReference {
@@ -804,34 +838,16 @@ func BuildScriptIndexForGUIDs(p Project, wanted map[string]bool) (ScriptIndex, e
 	if wanted != nil && len(wanted) == 0 {
 		return index, nil
 	}
-	err := filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	guidIndex, err := BuildGUIDIndexForGUIDs(p, wanted)
+	if err != nil {
+		return nil, err
+	}
+	for guid, path := range guidIndex {
+		if strings.HasSuffix(path, ".cs") {
+			index[guid] = path
 		}
-		if d.IsDir() {
-			if shouldSkipDir(d.Name()) && path != p.Assets {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".cs.meta") {
-			return nil
-		}
-		guid := ReadMetaGUID(path)
-		if guid == "" {
-			return nil
-		}
-		if wanted != nil && !wanted[strings.ToLower(guid)] {
-			return nil
-		}
-		scriptPath := strings.TrimSuffix(path, ".meta")
-		index[strings.ToLower(guid)] = p.AssetPath(scriptPath)
-		if wanted != nil && len(index) == len(wanted) {
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	return index, err
+	}
+	return index, nil
 }
 
 func containsLower(value, lowerNeedle string) bool {

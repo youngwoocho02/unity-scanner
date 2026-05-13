@@ -52,6 +52,7 @@ func listCmd(args []string) error {
 	result, err := unityasset.Scan(project, target, unityasset.ScanOptions{
 		Kinds:       unityasset.ParseKindSet(opts.kind),
 		IncludeMeta: opts.includeMeta,
+		Workers:     opts.workers,
 	})
 	if err != nil {
 		return err

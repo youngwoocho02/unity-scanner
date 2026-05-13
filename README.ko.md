@@ -83,6 +83,7 @@ unity-scanner version
 -p, --project <path>   Unity 프로젝트 경로
 --line-width <n>       출력 한 줄 최대 폭, 기본 1200, 0이면 자르지 않음
 --profile              명령 단계별 시간 프로파일 출력
+--workers <n>          병렬 worker 수, 기본 CPU 수
 ```
 
 명령 별칭: `ls` = `list`, `cat` = `read`, `find` = `search`

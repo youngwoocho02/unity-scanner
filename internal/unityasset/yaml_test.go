@@ -323,6 +323,9 @@ MonoBehaviour:
 	if len(refs) != 1 || refs[0].FieldName != "targets" {
 		t.Fatalf("refs=%#v", refs)
 	}
+	if strings.Contains(refs[0].Value, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") {
+		t.Fatalf("nested reference kept unrelated values: %s", refs[0].Value)
+	}
 }
 
 func TestScriptGUIDs(t *testing.T) {

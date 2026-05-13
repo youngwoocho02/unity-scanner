@@ -30,6 +30,7 @@ type searchOptions struct {
 	rootPath     string
 	scriptScoped bool
 	refDetail    bool
+	guidIndex    unityasset.GUIDIndex
 }
 
 type searchMatch struct {
@@ -110,7 +111,8 @@ func searchCmd(args []string) error {
 	kinds := unityasset.ParseKindSet(opts.types)
 	kinds = defaultSearchKinds(kinds, opts)
 	result, err := unityasset.Scan(project, target, unityasset.ScanOptions{
-		Kinds: kinds,
+		Kinds:   kinds,
+		Workers: opts.workers,
 	})
 	if err != nil {
 		return err
@@ -154,7 +156,10 @@ func runSearch(project unityasset.Project, files []unityasset.FileEntry, scripts
 		return runSearchSerial(project, files, scripts, opts)
 	}
 
-	workers := runtime.NumCPU()
+	workers := opts.workers
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
 	if workers > len(files) {
 		workers = len(files)
 	}
@@ -242,9 +247,12 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 		var asset *unityasset.Asset
 		var err error
 		if opts.refDetail {
+			if !result.Match.RawGUID {
+				return result
+			}
 			asset, err = unityasset.ReadAsset(file, scripts)
-			if err == nil {
-				asset.GUIDIndex, err = unityasset.BuildGUIDIndexForGUIDs(project, map[string]bool{opts.guid: true})
+			if err == nil && len(opts.guidIndex) > 0 {
+				asset.GUIDIndex = opts.guidIndex
 			}
 		} else {
 			asset, err = unityasset.ReadAssetSummary(file, scripts)
@@ -254,7 +262,10 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 				result.Match.Objects = objectMatches(asset, opts)
 			}
 			if opts.refDetail && result.Match.RawGUID {
-				result.Match.Refs = referenceMatches(asset, opts.guid)
+				result.Match.Refs, err = referenceMatchesWithResolvedComponents(project, asset, opts.guid)
+				if err != nil {
+					result.Warnings = append(result.Warnings, searchWarning{Path: file.AssetPath, Err: err})
+				}
 			}
 		} else {
 			result.Warnings = append(result.Warnings, searchWarning{Path: file.AssetPath, Err: err})
@@ -335,13 +346,27 @@ func pathUnder(path, root string) bool {
 	return path == root || strings.HasPrefix(path, root+"/")
 }
 
-func referenceMatches(asset *unityasset.Asset, guid string) []refMatch {
-	var out []refMatch
-	for _, ref := range asset.FieldReferences(guid) {
+func referenceMatchesWithResolvedComponents(project unityasset.Project, asset *unityasset.Asset, guid string) ([]refMatch, error) {
+	refs := asset.FieldReferences(guid)
+	wanted := map[string]bool{}
+	for _, ref := range refs {
+		if ref.Object != nil && ref.Object.ScriptGUID != "" {
+			wanted[ref.Object.ScriptGUID] = true
+		}
+	}
+	if len(wanted) > 0 {
+		scripts, err := unityasset.BuildScriptIndexForGUIDs(project, wanted)
+		if err != nil {
+			return nil, err
+		}
+		asset.ScriptIndex = scripts
+	}
+	out := make([]refMatch, 0, len(refs))
+	for _, ref := range refs {
 		component, objectPath := componentAndObjectPath(asset, ref.Object)
 		out = append(out, refMatch{Object: objectPath, Component: component, Field: ref.FieldName, Value: ref.Value})
 	}
-	return out
+	return out, nil
 }
 
 func componentAndObjectPath(asset *unityasset.Asset, obj *unityasset.Object) (string, string) {

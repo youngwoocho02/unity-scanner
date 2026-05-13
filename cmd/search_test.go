@@ -506,6 +506,42 @@ func TestRunSearchParallelKeepsWarningOrder(t *testing.T) {
 	}
 }
 
+func TestRefDetailSkipsStructuredReadWhenGUIDTextIsAbsent(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "NoRef.prefab"), "%YAML 1.1\nnot a unity object\n")
+	writeTestFile(t, filepath.Join(assets, "HasRef.prefab"), `%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Name: User
+  target: {fileID: 1, guid: abcdef123456abcdef123456abcdef12, type: 2}
+`)
+
+	project, err := unityasset.OpenProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := unityasset.Scan(project, "Assets", unityasset.ScanOptions{Kinds: unityasset.ParseKindSet("prefab")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, warnings := runSearch(project, result.Files, unityasset.ScriptIndex{}, searchOptions{
+		guid:        "abcdef123456abcdef123456abcdef12",
+		refDetail:   true,
+		guidIndex:   unityasset.GUIDIndex{"abcdef123456abcdef123456abcdef12": "Assets/Target.asset"},
+		objectLimit: 12,
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings=%#v", warnings)
+	}
+	if len(matches) != 1 || matches[0].File.Name != "HasRef" || len(matches[0].Refs) != 1 {
+		t.Fatalf("matches=%#v", matches)
+	}
+	if !strings.Contains(matches[0].Refs[0].Value, "Assets/Target.asset") {
+		t.Fatalf("unresolved ref value=%q", matches[0].Refs[0].Value)
+	}
+}
+
 func TestRunSearchScopedComponentDoesNotMatchMissingMonoBehaviourFallback(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")

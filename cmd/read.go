@@ -68,7 +68,7 @@ func readCmd(args []string) error {
 		return fmt.Errorf("read requires a file, got directory: %s", filepath.ToSlash(fs.Arg(0)))
 	}
 	profile.mark("stat_path")
-	result, err := unityasset.Scan(project, fs.Arg(0), unityasset.ScanOptions{})
+	result, err := unityasset.Scan(project, fs.Arg(0), unityasset.ScanOptions{Workers: opts.workers})
 	if err != nil {
 		return err
 	}

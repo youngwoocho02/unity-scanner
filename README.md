@@ -83,6 +83,7 @@ Project command option:
 -p, --project <path>   Unity project path
 --line-width <n>       Max output line width, default 1200, 0 disables truncation
 --profile              Print command timing profile
+--workers <n>          Parallel worker count, default CPU count
 ```
 
 Command aliases: `ls` = `list`, `cat` = `read`, `find` = `search`.

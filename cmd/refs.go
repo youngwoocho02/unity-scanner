@@ -60,7 +60,7 @@ func refsCmd(args []string) error {
 	}
 	kinds := unityasset.ParseKindSet(opts.types)
 	kinds = defaultSearchKinds(kinds, searchOptions{guid: guid})
-	result, err := unityasset.Scan(project, scanPath, unityasset.ScanOptions{Kinds: kinds})
+	result, err := unityasset.Scan(project, scanPath, unityasset.ScanOptions{Kinds: kinds, Workers: opts.workers})
 	if err != nil {
 		return err
 	}
@@ -74,16 +74,11 @@ func refsCmd(args []string) error {
 		limit:         opts.limit,
 		objectLimit:   12,
 		refDetail:     opts.detail,
+		guidIndex:     unityasset.GUIDIndex{guid: label},
 		commonOptions: commonOptions{lineWidth: opts.lineWidth},
 	}
 	_, searchOpts.rootPath, _ = project.Resolve(scanPath)
 	scripts := unityasset.ScriptIndex{}
-	if opts.detail {
-		scripts, err = unityasset.BuildScriptIndex(project)
-		if err != nil {
-			return err
-		}
-	}
 	profile.mark("build_script_index")
 	matches, warnings := runSearch(project, result.Files, scripts, searchOpts)
 	profile.mark("search_files")
