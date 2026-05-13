@@ -222,6 +222,7 @@ Options:
   --override <text>    only show prefab overrides matching text
   --override-limit <n> max prefab overrides shown, default 40, 0 unlimited
   --no-resolve         skip script, GUID, and source prefab path resolution
+  --profile            print read timing profile
 
 Examples:
   unity-scanner read -p . Assets/Scenes/Main.unity --depth 3

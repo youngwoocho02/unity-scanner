@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/youngwoocho02/unity-scanner/internal/format"
 	"github.com/youngwoocho02/unity-scanner/internal/unityasset"
@@ -22,6 +23,7 @@ type readOptions struct {
 	overrideFilter string
 	overrideLimit  int
 	noResolve      bool
+	profile        bool
 }
 
 func readCmd(args []string) error {
@@ -37,6 +39,7 @@ func readCmd(args []string) error {
 	fs.StringVar(&opts.overrideFilter, "override", "", "prefab override filter")
 	fs.IntVar(&opts.overrideLimit, "override-limit", opts.overrideLimit, "max prefab overrides shown, 0 for unlimited")
 	fs.BoolVar(&opts.noResolve, "no-resolve", false, "skip script, GUID, and source prefab path resolution")
+	fs.BoolVar(&opts.profile, "profile", false, "print read timing profile")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
 			printTopicHelp(os.Stdout, "read")
@@ -48,14 +51,28 @@ func readCmd(args []string) error {
 		return fmt.Errorf("read requires an asset path")
 	}
 
+	profileStart := time.Now()
+	profileLast := profileStart
+	profile := readProfile{}
+	mark := func(name string) {
+		if !opts.profile {
+			return
+		}
+		now := time.Now()
+		profile.add(name, now.Sub(profileLast))
+		profileLast = now
+	}
+
 	project, err := unityasset.OpenProject(opts.project)
 	if err != nil {
 		return err
 	}
+	mark("open_project")
 	abs, _, err := project.Resolve(fs.Arg(0))
 	if err != nil {
 		return err
 	}
+	mark("resolve_path")
 	info, err := os.Stat(abs)
 	if err != nil {
 		return err
@@ -63,6 +80,7 @@ func readCmd(args []string) error {
 	if info.IsDir() {
 		return fmt.Errorf("read requires a file, got directory: %s", filepath.ToSlash(fs.Arg(0)))
 	}
+	mark("stat_path")
 	result, err := unityasset.Scan(project, fs.Arg(0), unityasset.ScanOptions{})
 	if err != nil {
 		return err
@@ -74,44 +92,62 @@ func readCmd(args []string) error {
 	if !unityasset.KnownUnityYAMLKind(entry.Kind) {
 		return fmt.Errorf("read supports Unity YAML assets, got %s", entry.Kind)
 	}
+	mark("scan_asset")
 
 	asset, err := unityasset.ReadAsset(entry, unityasset.ScriptIndex{})
 	if err != nil {
 		return err
 	}
-	if !opts.noResolve && entry.Kind == "prefab" {
-		sourceGUIDs := sourceGUIDSet(asset.SourcePrefabGUIDs())
-		if len(sourceGUIDs) > 0 {
-			index, err := unityasset.BuildGUIDIndexForGUIDs(project, sourceGUIDs)
-			if err != nil {
-				return err
-			}
-			asset.SourcePaths = sourcePaths(asset.SourcePrefabGUIDs(), index)
-		}
-	}
+	mark("read_asset")
+
+	sourceGUIDs := []string(nil)
+	scriptGUIDs := asset.ScriptGUIDs()
+	resolved := unityasset.GUIDIndex{}
 	if !opts.noResolve {
-		scripts, err := unityasset.BuildScriptIndexForGUIDs(project, asset.ScriptGUIDs())
+		nativeComponentFilter := opts.component != "" && unityasset.MatchesNativeClassName(opts.component)
+		resolveScripts := opts.component == "" || !nativeComponentFilter
+		if entry.Kind == "prefab" && (opts.component == "" || !nativeComponentFilter) {
+			sourceGUIDs = asset.SourcePrefabGUIDs()
+		}
+		wanted := sourceGUIDSet(sourceGUIDs)
+		if resolveScripts {
+			addGUIDSet(wanted, scriptGUIDs)
+		}
+		if asset.Kind == "asset" {
+			addGUIDSet(wanted, fieldReferenceGUIDs(asset, nil, readComponentView{}, opts))
+		}
+		resolved, err = unityasset.BuildGUIDIndexForGUIDs(project, wanted)
 		if err != nil {
 			return err
 		}
-		asset.ScriptIndex = scripts
+		if resolveScripts {
+			asset.ScriptIndex = scriptIndexFromGUIDIndex(resolved, scriptGUIDs)
+		}
+		if entry.Kind == "prefab" {
+			asset.SourcePaths = sourcePaths(sourceGUIDs, resolved)
+		}
+		asset.GUIDIndex = resolved
 	}
+	mark("resolve_initial_guids")
 	roots := asset.Hierarchy()
 	flat := flattenHierarchy(roots)
 	components := buildReadComponentView(asset, flat)
+	mark("build_hierarchy")
 	if !opts.noResolve {
 		fieldGUIDs := fieldReferenceGUIDs(asset, flat, components, opts)
-		if len(fieldGUIDs) == 0 {
-			printRead(asset, roots, flat, components, opts)
-			return nil
+		removeKnownGUIDs(fieldGUIDs, resolved)
+		if len(fieldGUIDs) > 0 {
+			guidIndex, err := unityasset.BuildGUIDIndexForGUIDs(project, fieldGUIDs)
+			if err != nil {
+				return err
+			}
+			mergeGUIDIndex(asset.GUIDIndex, guidIndex)
 		}
-		guidIndex, err := unityasset.BuildGUIDIndexForGUIDs(project, fieldGUIDs)
-		if err != nil {
-			return err
-		}
-		asset.GUIDIndex = guidIndex
 	}
+	mark("resolve_field_guids")
 	printRead(asset, roots, flat, components, opts)
+	mark("print")
+	profile.print(profileStart)
 	return nil
 }
 
@@ -622,16 +658,49 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 func sourceGUIDSet(guids []string) map[string]bool {
 	set := map[string]bool{}
 	for _, guid := range guids {
-		set[guid] = true
+		set[strings.ToLower(guid)] = true
 	}
 	return set
+}
+
+func addGUIDSet(dst map[string]bool, src map[string]bool) {
+	for guid := range src {
+		if guid != "" {
+			dst[strings.ToLower(guid)] = true
+		}
+	}
+}
+
+func removeKnownGUIDs(wanted map[string]bool, index unityasset.GUIDIndex) {
+	for guid := range wanted {
+		if index[strings.ToLower(guid)] != "" {
+			delete(wanted, guid)
+		}
+	}
+}
+
+func mergeGUIDIndex(dst, src unityasset.GUIDIndex) {
+	for guid, path := range src {
+		dst[guid] = path
+	}
+}
+
+func scriptIndexFromGUIDIndex(index unityasset.GUIDIndex, wanted map[string]bool) unityasset.ScriptIndex {
+	scripts := unityasset.ScriptIndex{}
+	for guid := range wanted {
+		path := index[strings.ToLower(guid)]
+		if strings.HasSuffix(path, ".cs") {
+			scripts[strings.ToLower(guid)] = path
+		}
+	}
+	return scripts
 }
 
 func sourcePaths(guids []string, index unityasset.GUIDIndex) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, guid := range guids {
-		path := index[guid]
+		path := index[strings.ToLower(guid)]
 		if path == "" || seen[path] {
 			continue
 		}
@@ -639,6 +708,37 @@ func sourcePaths(guids []string, index unityasset.GUIDIndex) []string {
 		out = append(out, path)
 	}
 	return out
+}
+
+type readProfileStep struct {
+	name    string
+	elapsed time.Duration
+}
+
+type readProfile []readProfileStep
+
+func (p *readProfile) add(name string, elapsed time.Duration) {
+	*p = append(*p, readProfileStep{name: name, elapsed: elapsed})
+}
+
+func (p readProfile) print(start time.Time) {
+	if len(p) == 0 {
+		return
+	}
+	total := time.Since(start)
+	fmt.Println()
+	fmt.Println("PROFILE")
+	for _, step := range p {
+		fmt.Printf("  %-22s %s\n", step.name, formatDuration(step.elapsed))
+	}
+	fmt.Printf("  %-22s %s\n", "total", formatDuration(total))
+}
+
+func formatDuration(d time.Duration) string {
+	if d >= time.Second {
+		return fmt.Sprintf("%.3fs", d.Seconds())
+	}
+	return fmt.Sprintf("%.1fms", float64(d.Microseconds())/1000)
 }
 
 func printSourceHint(asset *unityasset.Asset, lineWidth int) {

@@ -397,6 +397,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --override <text>    only show prefab overrides matching text
 --override-limit <n> max prefab overrides shown, default 40, 0 unlimited
 --no-resolve         skip script, GUID, and source prefab path resolution
+--profile            print read timing profile
 ```
 
 ### search

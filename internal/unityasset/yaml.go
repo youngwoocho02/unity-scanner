@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var nativeClassNames = map[int]string{
@@ -845,35 +847,95 @@ func BuildGUIDIndexForGUIDs(p Project, wanted map[string]bool) (GUIDIndex, error
 	if wanted != nil && len(wanted) == 0 {
 		return index, nil
 	}
-	err := filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if shouldSkipDir(d.Name()) && path != p.Assets {
-				return filepath.SkipDir
+	workers := runtime.GOMAXPROCS(0)
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > 16 {
+		workers = 16
+	}
+
+	type item struct {
+		guid string
+		path string
+	}
+	jobs := make(chan string, workers*4)
+	results := make(chan item, workers*4)
+	done := make(chan struct{})
+	var closeDone sync.Once
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-done:
+					return
+				case path, ok := <-jobs:
+					if !ok {
+						return
+					}
+					guid := ReadMetaGUID(path)
+					if guid == "" {
+						continue
+					}
+					guid = strings.ToLower(guid)
+					if wanted != nil && !wanted[guid] {
+						continue
+					}
+					result := item{guid: guid, path: p.AssetPath(strings.TrimSuffix(path, ".meta"))}
+					select {
+					case results <- result:
+					case <-done:
+						return
+					}
+				}
+			}
+		}()
+	}
+	walkErr := make(chan error, 1)
+	go func() {
+		walkErr <- filepath.WalkDir(p.Assets, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			select {
+			case <-done:
+				return filepath.SkipAll
+			default:
+			}
+			if d.IsDir() {
+				if shouldSkipDir(d.Name()) && path != p.Assets {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !strings.HasSuffix(path, ".meta") {
+				return nil
+			}
+			select {
+			case jobs <- path:
+			case <-done:
+				return filepath.SkipAll
 			}
 			return nil
-		}
-		if !strings.HasSuffix(path, ".meta") {
-			return nil
-		}
-		guid := ReadMetaGUID(path)
-		if guid == "" {
-			return nil
-		}
-		guid = strings.ToLower(guid)
-		if wanted != nil && !wanted[guid] {
-			return nil
-		}
-		assetPath := strings.TrimSuffix(path, ".meta")
-		index[guid] = p.AssetPath(assetPath)
+		})
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		index[result.guid] = result.path
 		if wanted != nil && len(index) == len(wanted) {
-			return filepath.SkipAll
+			closeDone.Do(func() { close(done) })
 		}
-		return nil
-	})
-	return index, err
+	}
+	if err := <-walkErr; err != nil && err != filepath.SkipAll {
+		return nil, err
+	}
+	return index, nil
 }
 
 func ReadMetaGUID(path string) string {
@@ -881,18 +943,39 @@ func ReadMetaGUID(path string) string {
 	if err != nil {
 		return ""
 	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "guid:") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "guid:"))
+	start := 0
+	if !bytes.HasPrefix(data, []byte("guid:")) {
+		idx := bytes.Index(data, []byte("\nguid:"))
+		if idx < 0 {
+			return ""
 		}
+		start = idx + 1
 	}
-	return ""
+	start += len("guid:")
+	end := bytes.IndexByte(data[start:], '\n')
+	if end < 0 {
+		end = len(data)
+	} else {
+		end += start
+	}
+	return strings.TrimSpace(string(data[start:end]))
 }
 
 func NativeClassName(classID int) string {
 	return nativeClassNames[classID]
+}
+
+func MatchesNativeClassName(query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return false
+	}
+	for _, name := range nativeClassNames {
+		if containsLower(name, query) {
+			return true
+		}
+	}
+	return false
 }
 
 func scanObjectLine(obj *Object, line []byte) {

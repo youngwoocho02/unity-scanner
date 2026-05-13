@@ -281,6 +281,31 @@ MonoBehaviour:
 	}
 }
 
+func TestReadCmdProfilePrintsTiming(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Config.asset.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Config.asset"), `%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Name: Config
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Config.asset", "--profile"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, expected := range []string{"PROFILE", "read_asset", "resolve_initial_guids", "total"} {
+		if !strings.Contains(out, expected) {
+			t.Fatalf("profile missing %q:\n%s", expected, out)
+		}
+	}
+}
+
 func TestReadCmdOmitsPrefabSourcesForSceneAndComponentMatch(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")
