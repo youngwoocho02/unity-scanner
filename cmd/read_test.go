@@ -228,7 +228,7 @@ MonoBehaviour:
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, want := range []string{"PREFAB_SOURCES Assets/Base.prefab", "BaseCycleTime"} {
+	for _, want := range []string{"PREFAB_SOURCES Assets", "  . :: Base", "BaseCycleTime"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
@@ -282,6 +282,42 @@ PrefabInstance:
 	}
 	if strings.Contains(sceneBuf.String(), "PREFAB_SOURCES") {
 		t.Fatalf("scene read leaked prefab sources:\n%s", sceneBuf.String())
+	}
+}
+
+func TestReadCmdShowsGroupedSourceHintForComponentMiss(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), "x")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--component", "Missing"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{"prefab sources: Assets", "  . :: Base", "hint: read source prefabs"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
 	}
 }
 

@@ -165,7 +165,7 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 		fmt.Printf("GUID        %s\n", asset.GUID)
 	}
 	if opts.component == "" && len(asset.SourcePaths) > 0 {
-		printfLineLimited(opts.lineWidth, "PREFAB_SOURCES %s", strings.Join(asset.SourcePaths, ", "))
+		printPathGroupSection("PREFAB_SOURCES", asset.SourcePaths, opts.lineWidth)
 	}
 	if len(flat) == 0 {
 		fmt.Printf("YAML_OBJECTS %d\n", len(asset.Objects))
@@ -538,7 +538,7 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 	if matches == 0 {
 		fmt.Printf("no component matched %q\n", opts.component)
 		printAvailableComponents(components, opts.lineWidth)
-		printSourceHint(asset)
+		printSourceHint(asset, opts.lineWidth)
 	}
 	if hidden > 0 {
 		fmt.Printf("more components: %d hidden by --limit\n", hidden)
@@ -567,14 +567,11 @@ func sourcePaths(guids []string, index unityasset.GUIDIndex) []string {
 	return out
 }
 
-func printSourceHint(asset *unityasset.Asset) {
+func printSourceHint(asset *unityasset.Asset, lineWidth int) {
 	if len(asset.SourcePaths) == 0 {
 		return
 	}
-	fmt.Println("prefab sources:")
-	for _, path := range asset.SourcePaths {
-		fmt.Printf("  %s\n", path)
-	}
+	printPathGroupSection("prefab sources:", asset.SourcePaths, lineWidth)
 	fmt.Println("hint: read source prefabs to inspect nested or inherited components")
 }
 
