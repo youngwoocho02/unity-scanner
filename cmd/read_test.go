@@ -238,6 +238,49 @@ MonoBehaviour:
 	}
 }
 
+func TestReadCmdNoResolveSkipsPathResolution(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Scripts", "Config.cs.meta"), "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset"), "x")
+	writeTestFile(t, filepath.Join(assets, "Data", "Target.asset.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), "x")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab.meta"), "guid: dddddddddddddddddddddddddddddddd\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: cccccccccccccccccccccccccccccccc, type: 3}
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Script: {fileID: 11500000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+  m_Name: Config
+  target: {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--field-limit", "10", "--no-resolve"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, blocked := range []string{
+		"PREFAB_SOURCES",
+		"script: Assets/Scripts/Config.cs",
+		"-> Assets/Data/Target.asset",
+	} {
+		if strings.Contains(out, blocked) {
+			t.Fatalf("no-resolve leaked %q:\n%s", blocked, out)
+		}
+	}
+	if !strings.Contains(out, "MonoBehaviour(aaaaaaaa)") ||
+		!strings.Contains(out, "target                   {fileID: 1, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 2}") {
+		t.Fatalf("raw unresolved output missing:\n%s", out)
+	}
+}
+
 func TestReadCmdOmitsPrefabSourcesForSceneAndComponentMatch(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")

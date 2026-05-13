@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -1155,7 +1156,12 @@ func isHex(b byte) bool {
 
 func cleanScalar(value string) string {
 	value = strings.TrimSpace(value)
-	value = strings.Trim(value, `"`)
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		if unquoted, err := strconv.Unquote(value); err == nil {
+			return unquoted
+		}
+		return strings.Trim(value, `"`)
+	}
 	return value
 }
 

@@ -21,6 +21,7 @@ type readOptions struct {
 	fullTree       bool
 	overrideFilter string
 	overrideLimit  int
+	noResolve      bool
 }
 
 func readCmd(args []string) error {
@@ -35,6 +36,7 @@ func readCmd(args []string) error {
 	fs.BoolVar(&opts.fullTree, "full-tree", false, "show every visible tree row without render-only folding")
 	fs.StringVar(&opts.overrideFilter, "override", "", "prefab override filter")
 	fs.IntVar(&opts.overrideLimit, "override-limit", opts.overrideLimit, "max prefab overrides shown, 0 for unlimited")
+	fs.BoolVar(&opts.noResolve, "no-resolve", false, "skip script, GUID, and source prefab path resolution")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
 			printTopicHelp(os.Stdout, "read")
@@ -77,7 +79,7 @@ func readCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	if entry.Kind == "prefab" {
+	if !opts.noResolve && entry.Kind == "prefab" {
 		sourceGUIDs := sourceGUIDSet(asset.SourcePrefabGUIDs())
 		if len(sourceGUIDs) > 0 {
 			index, err := unityasset.BuildGUIDIndexForGUIDs(project, sourceGUIDs)
@@ -87,15 +89,22 @@ func readCmd(args []string) error {
 			asset.SourcePaths = sourcePaths(asset.SourcePrefabGUIDs(), index)
 		}
 	}
-	scripts, err := unityasset.BuildScriptIndexForGUIDs(project, asset.ScriptGUIDs())
-	if err != nil {
-		return err
+	if !opts.noResolve {
+		scripts, err := unityasset.BuildScriptIndexForGUIDs(project, asset.ScriptGUIDs())
+		if err != nil {
+			return err
+		}
+		asset.ScriptIndex = scripts
 	}
-	asset.ScriptIndex = scripts
 	roots := asset.Hierarchy()
 	flat := flattenHierarchy(roots)
 	components := buildReadComponentView(asset, flat)
-	if fieldGUIDs := fieldReferenceGUIDs(asset, flat, components, opts); len(fieldGUIDs) > 0 {
+	if !opts.noResolve {
+		fieldGUIDs := fieldReferenceGUIDs(asset, flat, components, opts)
+		if len(fieldGUIDs) == 0 {
+			printRead(asset, roots, flat, components, opts)
+			return nil
+		}
 		guidIndex, err := unityasset.BuildGUIDIndexForGUIDs(project, fieldGUIDs)
 		if err != nil {
 			return err

@@ -221,6 +221,7 @@ Options:
   --full-tree          show every visible tree row without render-only folding
   --override <text>    only show prefab overrides matching text
   --override-limit <n> max prefab overrides shown, default 40, 0 unlimited
+  --no-resolve         skip script, GUID, and source prefab path resolution
 
 Examples:
   unity-scanner read -p . Assets/Scenes/Main.unity --depth 3

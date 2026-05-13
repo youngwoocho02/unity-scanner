@@ -152,6 +152,35 @@ GameObject:
 	}
 }
 
+func TestQuotedUnityStringEscapesAreDecoded(t *testing.T) {
+	asset, err := ParseAsset([]byte(`%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 200, guid: abcdef123456, type: 3}
+      propertyPath: m_Name
+      value: "(Graphic) \uBBF8\uB155"
+      objectReference: {fileID: 0}
+  m_SourcePrefab: {fileID: 100100000, guid: abcdef123456, type: 3}
+--- !u!1 &100 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 200, guid: abcdef123456, type: 3}
+  m_PrefabInstance: {fileID: 100100000}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := asset.GameObjects()[0].Name; got != "(Graphic) 미녕" {
+		t.Fatalf("name=%q", got)
+	}
+	overrides := asset.PrefabOverrides()
+	if len(overrides) != 1 || overrides[0].Value != "(Graphic) 미녕" {
+		t.Fatalf("overrides=%#v", overrides)
+	}
+}
+
 func TestParseAssetSummaryKeepsPrefabOverrideNames(t *testing.T) {
 	asset, err := ParseAssetSummary([]byte(`%YAML 1.1
 --- !u!1001 &100100000
