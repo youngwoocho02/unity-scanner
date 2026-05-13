@@ -404,7 +404,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --no-resolve         skip script, GUID, and source prefab path resolution
 ```
 
-When `read` reports `PREFAB_SOURCES`, the tree view is local serialized YAML. `read --component` searches source prefabs on local misses and prints `SOURCE_MATCHES`; use Unity `LoadPrefabContents` only when the fully editor-resolved prefab state matters.
+When `read` reports `PREFAB_SOURCES`, the tree view is local serialized YAML. `read --component` searches source prefabs on local misses and prints `SOURCE_MATCHES`. Source matches are marked `INHERITED`, and matching variant property overrides are printed separately as `variant overrides`. Use Unity `LoadPrefabContents` only when the fully editor-resolved prefab state matters.
 
 ### search
 

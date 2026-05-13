@@ -404,7 +404,7 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --no-resolve         script, GUID, source prefab 경로 해석 생략
 ```
 
-`read`가 `PREFAB_SOURCES`를 표시하면 트리 뷰는 로컬 직렬화 YAML 기준이다. `read --component`는 로컬 미스 때 source prefab을 검색해 `SOURCE_MATCHES`를 표시한다. 완전한 Editor-resolved prefab 상태가 필요할 때만 Unity `LoadPrefabContents`로 확정한다.
+`read`가 `PREFAB_SOURCES`를 표시하면 트리 뷰는 로컬 직렬화 YAML 기준이다. `read --component`는 로컬 미스 때 source prefab을 검색해 `SOURCE_MATCHES`를 표시한다. source 매치는 `INHERITED`로 표시하고, 해당 variant property override는 `variant overrides`로 따로 출력한다. 완전한 Editor-resolved prefab 상태가 필요할 때만 Unity `LoadPrefabContents`로 확정한다.
 
 ### search
 

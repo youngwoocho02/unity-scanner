@@ -298,6 +298,7 @@ Details:
   Prefab overrides hide raw targets by default; use --raw-overrides for exact target refs.
   For prefab variants, --component first checks local YAML.
   If no local component matches, it searches source prefabs and prints SOURCE_MATCHES.
+  Source matches are marked INHERITED, with variant overrides shown separately.
   Non-prefab nested sources such as FBX files are skipped.
   Use --no-resolve when you need raw local YAML only.
   Use --profile to see where a slow command spends time.

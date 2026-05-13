@@ -494,6 +494,12 @@ MonoBehaviour:
 	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
 --- !u!1001 &100100000
 PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 400, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+      propertyPath: target
+      value: 
+      objectReference: {fileID: 0}
   m_SourcePrefab: {fileID: 100100000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
 --- !u!1 &100
 GameObject:
@@ -517,9 +523,12 @@ Transform:
 	for _, want := range []string{
 		"SOURCE_MATCHES",
 		"SOURCE     Assets/Base.prefab",
+		"INHERITED  static source prefab lookup; variant overrides shown separately",
 		"COMPONENT  SourceConfig",
 		"OBJECT     BaseRoot",
 		"target                   Target",
+		"variant overrides:",
+		"target                   null",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)

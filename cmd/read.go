@@ -144,7 +144,7 @@ func readCmd(args []string) error {
 	profile.mark("resolve_field_guids")
 	sourceComponents := []sourceComponentRead(nil)
 	if opts.component != "" && entry.Kind == "prefab" && !opts.noResolve && countReadMatches(asset, flat, components, opts) == 0 {
-		sourceComponents, err = collectSourceComponentReads(project, asset.SourcePaths, opts)
+		sourceComponents, err = collectSourceComponentReads(project, asset, opts)
 		if err != nil {
 			return err
 		}
@@ -167,10 +167,11 @@ type readComponentView struct {
 }
 
 type sourceComponentRead struct {
-	Path       string
-	Asset      *unityasset.Asset
-	Nodes      []*unityasset.Node
-	Components readComponentView
+	Path             string
+	Asset            *unityasset.Asset
+	Nodes            []*unityasset.Node
+	Components       readComponentView
+	VariantOverrides []unityasset.PrefabOverride
 }
 
 type componentReadStats struct {
@@ -773,11 +774,11 @@ func prefabOverrideMatches(override unityasset.PrefabOverride, filter string) bo
 
 func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, sourceComponents []sourceComponentRead, opts readOptions) {
 	stats := componentReadStats{}
-	printComponentMatches(asset, nodes, components, "", &stats, opts)
+	printComponentMatches(asset, nodes, components, "", nil, &stats, opts)
 	if stats.matches == 0 && len(sourceComponents) > 0 {
 		fmt.Println("SOURCE_MATCHES")
 		for _, source := range sourceComponents {
-			printComponentMatches(source.Asset, source.Nodes, source.Components, source.Path, &stats, opts)
+			printComponentMatches(source.Asset, source.Nodes, source.Components, source.Path, source.VariantOverrides, &stats, opts)
 		}
 	}
 	if stats.matches == 0 {
@@ -790,7 +791,7 @@ func printComponentRead(asset *unityasset.Asset, nodes []*unityasset.Node, compo
 	}
 }
 
-func printComponentMatches(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, sourcePath string, stats *componentReadStats, opts readOptions) {
+func printComponentMatches(asset *unityasset.Asset, nodes []*unityasset.Node, components readComponentView, sourcePath string, variantOverrides []unityasset.PrefabOverride, stats *componentReadStats, opts readOptions) {
 	for _, node := range nodes {
 		if opts.path != "" && !containsFold(node.Path, opts.path) {
 			continue
@@ -806,6 +807,7 @@ func printComponentMatches(asset *unityasset.Asset, nodes []*unityasset.Node, co
 			stats.matches++
 			if sourcePath != "" {
 				fmt.Printf("SOURCE     %s\n", sourcePath)
+				fmt.Printf("INHERITED  %s\n", staticResolvedNotice())
 			}
 			fmt.Printf("COMPONENT  %s\n", component.Name)
 			fmt.Printf("OBJECT     %s\n", node.Path)
@@ -824,14 +826,16 @@ func printComponentMatches(asset *unityasset.Asset, nodes []*unityasset.Node, co
 			if hiddenFields > 0 {
 				fmt.Printf("more fields: %d hidden by --field-limit\n", hiddenFields)
 			}
+			printVariantOverrides(asset, component.Object, variantOverrides, opts)
 			fmt.Println()
 		}
 	}
 }
 
-func collectSourceComponentReads(project unityasset.Project, sourcePaths []string, opts readOptions) ([]sourceComponentRead, error) {
+func collectSourceComponentReads(project unityasset.Project, variantAsset *unityasset.Asset, opts readOptions) ([]sourceComponentRead, error) {
 	seen := map[string]bool{}
-	queue := append([]string(nil), sourcePaths...)
+	queue := append([]string(nil), variantAsset.SourcePaths...)
+	variantOverrides := variantAsset.PrefabOverrides()
 	out := []sourceComponentRead(nil)
 	for len(queue) > 0 {
 		sourcePath := queue[0]
@@ -849,6 +853,7 @@ func collectSourceComponentReads(project unityasset.Project, sourcePaths []strin
 			continue
 		}
 		if countComponentMatches(source.Nodes, source.Components, opts) > 0 {
+			source.VariantOverrides = sourceAssetOverrides(variantOverrides, source.Asset.GUID)
 			out = append(out, source)
 			continue
 		}
@@ -859,6 +864,84 @@ func collectSourceComponentReads(project unityasset.Project, sourcePaths []strin
 		}
 	}
 	return out, nil
+}
+
+func printVariantOverrides(asset *unityasset.Asset, component *unityasset.Object, overrides []unityasset.PrefabOverride, opts readOptions) {
+	if component == nil || len(overrides) == 0 {
+		return
+	}
+	matches := componentPropertyOverrides(overrides, asset.GUID, component.ID)
+	if len(matches) == 0 {
+		return
+	}
+	fmt.Println("variant overrides:")
+	for _, override := range matches {
+		value := prefabOverrideDisplayValue(override.Value)
+		if value != "null" {
+			value = asset.ResolveReferences(value)
+		}
+		printfLineLimited(opts.lineWidth, "  %-24s %s", override.PropertyPath, value)
+	}
+}
+
+func sourceAssetOverrides(overrides []unityasset.PrefabOverride, sourceGUID string) []unityasset.PrefabOverride {
+	sourceGUID = strings.ToLower(sourceGUID)
+	out := []unityasset.PrefabOverride(nil)
+	for _, override := range overrides {
+		if sourceGUID == "" || prefabOverrideGUID(override.Target) == sourceGUID {
+			out = append(out, override)
+		}
+	}
+	return out
+}
+
+func componentPropertyOverrides(overrides []unityasset.PrefabOverride, sourceGUID, componentID string) []unityasset.PrefabOverride {
+	sourceGUID = strings.ToLower(sourceGUID)
+	out := []unityasset.PrefabOverride(nil)
+	for _, override := range overrides {
+		if override.Kind != "property" || override.PropertyPath == "" {
+			continue
+		}
+		if prefabOverrideFileID(override.Target) != componentID {
+			continue
+		}
+		targetGUID := prefabOverrideGUID(override.Target)
+		if sourceGUID != "" && targetGUID != "" && targetGUID != sourceGUID {
+			continue
+		}
+		out = append(out, override)
+	}
+	return out
+}
+
+func prefabOverrideGUID(value string) string {
+	const marker = "guid:"
+	index := strings.Index(value, marker)
+	if index < 0 {
+		return ""
+	}
+	i := index + len(marker)
+	for i < len(value) && value[i] == ' ' {
+		i++
+	}
+	start := i
+	for i < len(value) && isHexByte(value[i]) {
+		i++
+	}
+	if i == start {
+		return ""
+	}
+	return strings.ToLower(value[start:i])
+}
+
+func isHexByte(value byte) bool {
+	return (value >= '0' && value <= '9') ||
+		(value >= 'a' && value <= 'f') ||
+		(value >= 'A' && value <= 'F')
+}
+
+func staticResolvedNotice() string {
+	return "static source prefab lookup; variant overrides shown separately"
 }
 
 func readSourcePrefab(project unityasset.Project, sourcePath string, opts readOptions) (sourceComponentRead, bool, error) {

@@ -404,7 +404,7 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 --no-resolve         script、GUID、source prefab path の解決を省略
 ```
 
-`read` が `PREFAB_SOURCES` を表示する場合、tree view は local serialized YAML 基準です。`read --component` は local miss 時に source prefab を検索し、`SOURCE_MATCHES` を表示します。完全な editor-resolved prefab state が必要な場合だけ Unity `LoadPrefabContents` で確認します。
+`read` が `PREFAB_SOURCES` を表示する場合、tree view は local serialized YAML 基準です。`read --component` は local miss 時に source prefab を検索し、`SOURCE_MATCHES` を表示します。source match は `INHERITED` として表示し、該当する variant property override は `variant overrides` として別に出力します。完全な editor-resolved prefab state が必要な場合だけ Unity `LoadPrefabContents` で確認します。
 
 ### search
 
