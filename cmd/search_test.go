@@ -406,6 +406,30 @@ Transform:
 	}
 }
 
+func TestSearchCmdMatchesPrefabSource(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), "x")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_SourcePrefab: {fileID: 100100000, guid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, type: 3}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := searchCmd([]string{"-p", dir, "Assets", "--source", "Base.prefab", "--type", "prefab"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Variant") || !strings.Contains(out, "source: Assets/Base.prefab") {
+		t.Fatalf("source search missing:\n%s", out)
+	}
+}
+
 func TestSearchCmdProfilePrintsTiming(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")

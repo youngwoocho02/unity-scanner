@@ -408,6 +408,7 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --name <text>        파일명 또는 GameObject 이름 검색
 --component <text>   컴포넌트/스크립트 이름 검색
 --script-path <path> 지정 에셋 경로 아래 MonoBehaviour 스크립트 검색
+--source <text>      prefab source 경로/이름 검색
 --guid <guid>        원본 Unity GUID 참조 검색
 --ref <guid>         --guid 별칭
 --type <list>        prefab,scene,asset,cs,mat

@@ -20,6 +20,7 @@ type searchOptions struct {
 	name         string
 	component    string
 	scriptPath   string
+	source       string
 	guid         string
 	ref          string
 	types        string
@@ -31,12 +32,14 @@ type searchOptions struct {
 	scriptScoped bool
 	refDetail    bool
 	guidIndex    unityasset.GUIDIndex
+	sourceIndex  unityasset.GUIDIndex
 }
 
 type searchMatch struct {
 	File        unityasset.FileEntry
 	Objects     []objectMatch
 	Refs        []refMatch
+	SourcePaths []string
 	RawGUID     bool
 	FileNameHit bool
 }
@@ -76,6 +79,7 @@ func searchCmd(args []string) error {
 	fs.StringVar(&opts.name, "name", "", "file or GameObject name")
 	fs.StringVar(&opts.component, "component", "", "component or script name")
 	fs.StringVar(&opts.scriptPath, "script-path", "", "match MonoBehaviour scripts under asset path")
+	fs.StringVar(&opts.source, "source", "", "match prefab source path/name")
 	fs.StringVar(&opts.guid, "guid", "", "raw Unity GUID")
 	fs.StringVar(&opts.ref, "ref", "", "raw Unity GUID alias")
 	fs.StringVar(&opts.types, "type", "", "comma-separated asset kinds")
@@ -93,8 +97,8 @@ func searchCmd(args []string) error {
 	if opts.guid == "" {
 		opts.guid = opts.ref
 	}
-	if opts.name == "" && opts.component == "" && opts.scriptPath == "" && opts.guid == "" {
-		return fmt.Errorf("search requires --name, --component, --script-path, --guid, or --ref")
+	if opts.name == "" && opts.component == "" && opts.scriptPath == "" && opts.source == "" && opts.guid == "" {
+		return fmt.Errorf("search requires --name, --component, --script-path, --source, --guid, or --ref")
 	}
 	profile := newCommandProfile(opts.profile)
 
@@ -134,6 +138,13 @@ func searchCmd(args []string) error {
 		opts.scriptScoped = true
 	}
 	profile.mark("build_script_index")
+	if opts.source != "" {
+		opts.sourceIndex, err = unityasset.BuildGUIDIndex(project)
+		if err != nil {
+			return err
+		}
+	}
+	profile.mark("build_source_index")
 
 	_, opts.rootPath, _ = project.Resolve(target)
 	matches, warnings := runSearch(project, result.Files, scripts, opts)
@@ -242,7 +253,7 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 		return result
 	}
 
-	needsStructured := opts.name != "" || opts.component != "" || opts.scriptPath != "" || opts.refDetail
+	needsStructured := opts.name != "" || opts.component != "" || opts.scriptPath != "" || opts.source != "" || opts.refDetail
 	if needsStructured && unityasset.KnownUnityYAMLKind(file.Kind) {
 		var asset *unityasset.Asset
 		var err error
@@ -258,6 +269,13 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 			asset, err = unityasset.ReadAssetSummary(file, scripts)
 		}
 		if err == nil {
+			if opts.source != "" {
+				sourcePaths := sourcePaths(asset.SourcePrefabGUIDs(), opts.sourceIndex)
+				result.Match.SourcePaths = sourcePaths
+				if sourceMatches(sourcePaths, opts.source) {
+					result.Matched = true
+				}
+			}
 			if opts.name != "" || opts.component != "" || opts.scriptPath != "" {
 				result.Match.Objects = objectMatches(asset, opts)
 			}
@@ -272,8 +290,17 @@ func searchOneFile(project unityasset.Project, index int, file unityasset.FileEn
 		}
 	}
 
-	result.Matched = result.Match.RawGUID || result.Match.FileNameHit || len(result.Match.Objects) > 0
+	result.Matched = result.Matched || result.Match.RawGUID || result.Match.FileNameHit || len(result.Match.Objects) > 0
 	return result
+}
+
+func sourceMatches(paths []string, query string) bool {
+	for _, path := range paths {
+		if containsFold(path, query) {
+			return true
+		}
+	}
+	return false
 }
 
 func objectMatches(asset *unityasset.Asset, opts searchOptions) []objectMatch {
@@ -447,6 +474,9 @@ func printSearchMatch(match searchMatch, opts searchOptions) {
 	}
 	if match.RawGUID {
 		fmt.Println("    guid-reference")
+	}
+	for _, source := range match.SourcePaths {
+		printfLineLimited(currentSearchLineWidth, "    source: %s", source)
 	}
 	for _, ref := range match.Refs {
 		if ref.Object != "" {

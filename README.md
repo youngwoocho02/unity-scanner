@@ -408,6 +408,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --name <text>        match file or GameObject name
 --component <text>   match component/script name
 --script-path <path> match MonoBehaviour scripts under asset path
+--source <text>      match prefab source path/name
 --guid <guid>        match raw Unity GUID reference
 --ref <guid>         alias of --guid
 --type <list>        prefab,scene,asset,cs,mat

@@ -408,6 +408,7 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 --name <text>        ファイル名または GameObject 名を検索
 --component <text>   コンポーネント/スクリプト名を検索
 --script-path <path> 指定したアセットパス配下の MonoBehaviour スクリプトを検索
+--source <text>      prefab source のパス/名前を検索
 --guid <guid>        未加工の Unity GUID 参照を検索
 --ref <guid>         --guid の別名
 --type <list>        prefab,scene,asset,cs,mat
