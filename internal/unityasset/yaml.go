@@ -1288,7 +1288,7 @@ func assignNodePath(node *Node, parent string, depth int) {
 	node.Depth = depth
 	name := node.GameObject.Name
 	if name == "" {
-		name = "<unnamed>"
+		name = "<unnamed:" + node.GameObject.ID + ">"
 	}
 	if parent == "" {
 		node.Path = name
