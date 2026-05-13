@@ -400,7 +400,6 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --override <text>    지정 텍스트와 맞는 prefab override만 표시
 --override-limit <n> 최대 prefab override 표시 수, 기본 40, 0은 무제한
 --no-resolve         script, GUID, source prefab 경로 해석 생략
---profile            read 단계별 시간 프로파일 출력
 ```
 
 ### search
