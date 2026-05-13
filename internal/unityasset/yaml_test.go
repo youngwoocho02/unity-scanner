@@ -63,6 +63,120 @@ Transform:
 	}
 }
 
+func TestComponentsForIncludesAddedComponentByGameObjectReference(t *testing.T) {
+	data := []byte(`%YAML 1.1
+--- !u!1 &100 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 200, guid: abcdef123456, type: 3}
+  m_PrefabInstance: {fileID: 100100000}
+--- !u!65 &300
+BoxCollider:
+  m_GameObject: {fileID: 100}
+  m_Size: {x: 1, y: 2, z: 3}
+`)
+
+	asset, err := ParseAsset(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	components := asset.ComponentsFor("100")
+	if len(components) != 1 || components[0].Name != "BoxCollider" {
+		t.Fatalf("components=%#v", components)
+	}
+	fields := asset.Fields(components[0].Object, 10)
+	if len(fields) != 1 || fields[0].Name != "m_Size" {
+		t.Fatalf("fields=%#v", fields)
+	}
+}
+
+func TestPrefabOverridesReportsPropertyAndRemovedComponentData(t *testing.T) {
+	asset, err := ParseAsset([]byte(`%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 200, guid: abcdef123456, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents:
+    - {fileID: 300, guid: abcdef123456, type: 3}
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 200, guid: abcdef123456, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 400}
+  m_SourcePrefab: {fileID: 100100000, guid: abcdef123456, type: 3}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	overrides := asset.PrefabOverrides()
+	if len(overrides) != 3 {
+		t.Fatalf("overrides=%#v", overrides)
+	}
+	if overrides[0].Kind != "property" || overrides[0].PropertyPath != "m_IsActive" || overrides[0].Value != "0" {
+		t.Fatalf("property override=%#v", overrides[0])
+	}
+	if overrides[1].Kind != "removed-components" || !strings.Contains(overrides[1].Target, "fileID: 300") {
+		t.Fatalf("removed override=%#v", overrides[1])
+	}
+	if overrides[2].Kind != "added-component" || !strings.Contains(overrides[2].AddedObject, "fileID: 400") {
+		t.Fatalf("added override=%#v", overrides[2])
+	}
+}
+
+func TestPrefabNameOverrideLabelsStrippedGameObject(t *testing.T) {
+	asset, err := ParseAsset([]byte(`%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 200, guid: abcdef123456, type: 3}
+      propertyPath: m_Name
+      value: Ghost Root
+      objectReference: {fileID: 0}
+  m_SourcePrefab: {fileID: 100100000, guid: abcdef123456, type: 3}
+--- !u!1 &100 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 200, guid: abcdef123456, type: 3}
+  m_PrefabInstance: {fileID: 100100000}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := asset.GameObjects()[0].Name; got != "Ghost Root" {
+		t.Fatalf("name=%q", got)
+	}
+}
+
+func TestParseAssetSummaryKeepsPrefabOverrideNames(t *testing.T) {
+	asset, err := ParseAssetSummary([]byte(`%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 200, guid: abcdef123456, type: 3}
+      propertyPath: m_Name
+      value: Ghost Root
+      objectReference: {fileID: 0}
+  m_SourcePrefab: {fileID: 100100000, guid: abcdef123456, type: 3}
+--- !u!1 &100 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 200, guid: abcdef123456, type: 3}
+  m_PrefabInstance: {fileID: 100100000}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := asset.GameObjects()[0].Name; got != "Ghost Root" {
+		t.Fatalf("name=%q", got)
+	}
+}
+
 func TestParseScriptableAssetFields(t *testing.T) {
 	data := []byte(`%YAML 1.1
 --- !u!114 &11400000

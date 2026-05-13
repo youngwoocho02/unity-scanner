@@ -38,11 +38,12 @@ var nativeClassNames = map[int]string{
 }
 
 var (
-	nameLinePrefix       = []byte("  m_Name:")
-	gameObjectLinePrefix = []byte("  m_GameObject:")
-	fatherLinePrefix     = []byte("  m_Father:")
-	scriptLinePrefix     = []byte("  m_Script:")
-	componentLineMarker  = []byte("- component:")
+	nameLinePrefix         = []byte("  m_Name:")
+	gameObjectLinePrefix   = []byte("  m_GameObject:")
+	fatherLinePrefix       = []byte("  m_Father:")
+	sourceObjectLinePrefix = []byte("  m_CorrespondingSourceObject:")
+	scriptLinePrefix       = []byte("  m_Script:")
+	componentLineMarker    = []byte("- component:")
 )
 
 type Asset struct {
@@ -66,6 +67,8 @@ type Object struct {
 	ComponentIDs      []string
 	GameObjectID      string
 	FatherTransformID string
+	SourceObjectID    string
+	SourceGUID        string
 	ScriptGUID        string
 }
 
@@ -91,6 +94,14 @@ type FieldReference struct {
 	Object    *Object
 	FieldName string
 	Value     string
+}
+
+type PrefabOverride struct {
+	Kind         string
+	Target       string
+	PropertyPath string
+	Value        string
+	AddedObject  string
 }
 
 type ScriptIndex map[string]string
@@ -163,6 +174,9 @@ func ParseAssetWithOptions(data []byte, opts ParseOptions) (*Asset, error) {
 			continue
 		}
 		scanObjectLine(current, line)
+		if current.Type == "PrefabInstance" {
+			current.Lines = append(current.Lines, string(line))
+		}
 	}
 	if current != nil {
 		asset.finishObject(current)
@@ -173,6 +187,7 @@ func ParseAssetWithOptions(data []byte, opts ParseOptions) (*Asset, error) {
 	if len(asset.Objects) == 0 {
 		return nil, fmt.Errorf("no Unity YAML objects found")
 	}
+	asset.applyPrefabNameOverrides()
 	return asset, nil
 }
 
@@ -188,6 +203,8 @@ func (a *Asset) finishObject(o *Object) {
 		default:
 			o.GameObjectID = readFileIDField(o.Lines, "m_GameObject")
 		}
+		o.SourceObjectID = readFileIDField(o.Lines, "m_CorrespondingSourceObject")
+		o.SourceGUID = readGUIDField(o.Lines, "m_CorrespondingSourceObject")
 		if o.Type == "MonoBehaviour" {
 			o.ScriptGUID = readGUIDField(o.Lines, "m_Script")
 		}
@@ -273,11 +290,21 @@ func (a *Asset) ComponentsFor(goID string) []Component {
 		return nil
 	}
 	out := make([]Component, 0, len(goObj.ComponentIDs))
+	seen := map[string]bool{}
 	for _, compID := range goObj.ComponentIDs {
 		compObj := a.ByID[compID]
 		if compObj == nil {
 			continue
 		}
+		seen[compObj.ID] = true
+		name, scriptPath := a.ComponentName(compObj)
+		out = append(out, Component{Object: compObj, Name: name, ScriptPath: scriptPath})
+	}
+	for _, compObj := range a.Objects {
+		if compObj.GameObjectID != goID || seen[compObj.ID] || compObj.Type == "GameObject" {
+			continue
+		}
+		seen[compObj.ID] = true
 		name, scriptPath := a.ComponentName(compObj)
 		out = append(out, Component{Object: compObj, Name: name, ScriptPath: scriptPath})
 	}
@@ -489,6 +516,118 @@ func (a *Asset) SourcePrefabGUIDs() []string {
 		out = append(out, guid)
 	}
 	return out
+}
+
+func (a *Asset) PrefabOverrides() []PrefabOverride {
+	var out []PrefabOverride
+	for _, obj := range a.Objects {
+		if obj.Type != "PrefabInstance" {
+			continue
+		}
+		out = append(out, parsePrefabOverrides(obj.Lines)...)
+	}
+	return out
+}
+
+func parsePrefabOverrides(lines []string) []PrefabOverride {
+	var out []PrefabOverride
+	section := ""
+	for i := 0; i < len(lines); i++ {
+		trim := strings.TrimSpace(lines[i])
+		switch trim {
+		case "m_Modifications:":
+			section = "modifications"
+			continue
+		case "m_RemovedComponents:":
+			section = "removed-components"
+			continue
+		case "m_RemovedGameObjects:":
+			section = "removed-gameobjects"
+			continue
+		case "m_AddedComponents:":
+			section = "added-components"
+			continue
+		case "m_AddedGameObjects:":
+			section = "added-gameobjects"
+			continue
+		}
+		if !strings.HasPrefix(trim, "- ") {
+			continue
+		}
+		switch section {
+		case "modifications":
+			mod, next := parsePrefabPropertyOverride(lines, i)
+			if mod.Target != "" {
+				out = append(out, mod)
+			}
+			i = next
+		case "removed-components", "removed-gameobjects":
+			target := strings.TrimSpace(strings.TrimPrefix(trim, "- "))
+			if target != "" && target != "[]" {
+				out = append(out, PrefabOverride{Kind: section, Target: target})
+			}
+		case "added-components":
+			mod, next := parsePrefabAddedComponentOverride(lines, i)
+			if mod.Target != "" || mod.AddedObject != "" {
+				out = append(out, mod)
+			}
+			i = next
+		}
+	}
+	return out
+}
+
+func parsePrefabPropertyOverride(lines []string, start int) (PrefabOverride, int) {
+	out := PrefabOverride{Kind: "property"}
+	for i := start; i < len(lines); i++ {
+		trim := strings.TrimSpace(lines[i])
+		if i > start && isPrefabOverrideSection(trim) {
+			return out, i - 1
+		}
+		if i > start && strings.HasPrefix(trim, "- ") {
+			return out, i - 1
+		}
+		switch {
+		case strings.HasPrefix(trim, "- target:"):
+			out.Target = strings.TrimSpace(strings.TrimPrefix(trim, "- target:"))
+		case strings.HasPrefix(trim, "propertyPath:"):
+			out.PropertyPath = DisplayFieldName(cleanScalar(strings.TrimSpace(strings.TrimPrefix(trim, "propertyPath:"))))
+		case strings.HasPrefix(trim, "value:"):
+			out.Value = cleanScalar(strings.TrimSpace(strings.TrimPrefix(trim, "value:")))
+		case strings.HasPrefix(trim, "objectReference:") && out.Value == "":
+			out.Value = strings.TrimSpace(strings.TrimPrefix(trim, "objectReference:"))
+		}
+	}
+	return out, len(lines) - 1
+}
+
+func parsePrefabAddedComponentOverride(lines []string, start int) (PrefabOverride, int) {
+	out := PrefabOverride{Kind: "added-component"}
+	for i := start; i < len(lines); i++ {
+		trim := strings.TrimSpace(lines[i])
+		if i > start && isPrefabOverrideSection(trim) {
+			return out, i - 1
+		}
+		if i > start && strings.HasPrefix(trim, "- ") {
+			return out, i - 1
+		}
+		switch {
+		case strings.HasPrefix(trim, "- targetCorrespondingSourceObject:"):
+			out.Target = strings.TrimSpace(strings.TrimPrefix(trim, "- targetCorrespondingSourceObject:"))
+		case strings.HasPrefix(trim, "addedObject:"):
+			out.AddedObject = strings.TrimSpace(strings.TrimPrefix(trim, "addedObject:"))
+		}
+	}
+	return out, len(lines) - 1
+}
+
+func isPrefabOverrideSection(trim string) bool {
+	switch trim {
+	case "m_Modifications:", "m_RemovedComponents:", "m_RemovedGameObjects:", "m_AddedComponents:", "m_AddedGameObjects:":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *Asset) FieldReferences(targetGUID string) []FieldReference {
@@ -767,6 +906,11 @@ func scanObjectLine(obj *Object, line []byte) {
 		obj.GameObjectID = extractFileIDBytes(line)
 		return
 	}
+	if bytes.HasPrefix(line, sourceObjectLinePrefix) {
+		obj.SourceObjectID = extractFileIDBytes(line)
+		obj.SourceGUID = extractGUIDBytes(line)
+		return
+	}
 	if bytes.HasPrefix(line, fatherLinePrefix) {
 		obj.FatherTransformID = extractFileIDBytes(line)
 		return
@@ -779,6 +923,32 @@ func scanObjectLine(obj *Object, line []byte) {
 	}
 	if obj.Type == "MonoBehaviour" && bytes.HasPrefix(line, scriptLinePrefix) {
 		obj.ScriptGUID = extractGUIDBytes(line)
+	}
+}
+
+func (a *Asset) applyPrefabNameOverrides() {
+	names := map[string]string{}
+	for _, override := range a.PrefabOverrides() {
+		if override.Kind != "property" || override.PropertyPath != "m_Name" || override.Value == "" {
+			continue
+		}
+		id := extractFileID(override.Target)
+		guid := extractGUID(override.Target)
+		if id == "" || guid == "" {
+			continue
+		}
+		names[strings.ToLower(guid)+"\x00"+id] = override.Value
+	}
+	if len(names) == 0 {
+		return
+	}
+	for _, obj := range a.Objects {
+		if obj.Name != "" || obj.SourceObjectID == "" || obj.SourceGUID == "" {
+			continue
+		}
+		if name := names[strings.ToLower(obj.SourceGUID)+"\x00"+obj.SourceObjectID]; name != "" {
+			obj.Name = name
+		}
 	}
 }
 
@@ -805,6 +975,9 @@ func parseHeaderLine(line []byte) (int, string, bool) {
 		return 0, "", false
 	}
 	id := string(rest[space+2:])
+	if fields := strings.Fields(id); len(fields) > 0 {
+		id = fields[0]
+	}
 	if id == "" {
 		return 0, "", false
 	}

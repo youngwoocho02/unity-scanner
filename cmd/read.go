@@ -188,6 +188,7 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 	}
 
 	printHierarchy(roots, components, opts)
+	printPrefabOverrides(asset, opts)
 }
 
 func flattenHierarchy(roots []*unityasset.Node) []*unityasset.Node {
@@ -496,6 +497,37 @@ func printYAMLObjects(asset *unityasset.Asset, opts readOptions) {
 	}
 	if matches == 0 && opts.component != "" {
 		fmt.Printf("no object matched %q\n", opts.component)
+	}
+}
+
+func printPrefabOverrides(asset *unityasset.Asset, opts readOptions) {
+	if asset.Kind != "prefab" {
+		return
+	}
+	overrides := asset.PrefabOverrides()
+	if len(overrides) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println("OVERRIDES")
+	limit := len(overrides)
+	hidden := 0
+	if opts.limit > 0 && limit > opts.limit {
+		hidden = limit - opts.limit
+		limit = opts.limit
+	}
+	for _, override := range overrides[:limit] {
+		switch override.Kind {
+		case "property":
+			printfLineLimited(opts.lineWidth, "  property %s %s=%s", override.Target, override.PropertyPath, override.Value)
+		case "added-component":
+			printfLineLimited(opts.lineWidth, "  added-component target=%s added=%s", override.Target, override.AddedObject)
+		default:
+			printfLineLimited(opts.lineWidth, "  %s %s", override.Kind, override.Target)
+		}
+	}
+	if hidden > 0 {
+		fmt.Printf("  more overrides: %d hidden by --limit\n", hidden)
 	}
 }
 

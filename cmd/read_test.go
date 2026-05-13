@@ -321,6 +321,72 @@ Transform:
 	}
 }
 
+func TestReadCmdFindsPrefabVariantAddedComponentAndOverrides(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab"), "x")
+	writeTestFile(t, filepath.Join(assets, "Base.prefab.meta"), "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab.meta"), "guid: cccccccccccccccccccccccccccccccc\n")
+	writeTestFile(t, filepath.Join(assets, "Variant.prefab"), `%YAML 1.1
+--- !u!1001 &100100000
+PrefabInstance:
+  m_Modification:
+    m_Modifications:
+    - target: {fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents:
+    - {fileID: 300, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 400}
+  m_SourcePrefab: {fileID: 100100000, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+--- !u!1 &100 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}
+  m_PrefabInstance: {fileID: 100100000}
+--- !u!65 &400
+BoxCollider:
+  m_GameObject: {fileID: 100}
+  m_Size: {x: 1, y: 2, z: 3}
+`)
+
+	var componentBuf bytes.Buffer
+	restoreStdout := captureStdout(&componentBuf)
+	err := readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--component", "BoxCollider"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	componentOut := componentBuf.String()
+	if !strings.Contains(componentOut, "COMPONENT  BoxCollider") ||
+		!strings.Contains(componentOut, "m_Size") {
+		t.Fatalf("added component not shown:\n%s", componentOut)
+	}
+
+	var fullBuf bytes.Buffer
+	restoreStdout = captureStdout(&fullBuf)
+	err = readCmd([]string{"-p", dir, "Assets/Variant.prefab"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullOut := fullBuf.String()
+	for _, want := range []string{
+		"OVERRIDES",
+		"property {fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3} m_IsActive=0",
+		"removed-components {fileID: 300, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}",
+		"added-component target={fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3} added={fileID: 400}",
+	} {
+		if !strings.Contains(fullOut, want) {
+			t.Fatalf("missing %q in:\n%s", want, fullOut)
+		}
+	}
+}
+
 func TestFieldReferenceGUIDsUnlimitedByDefault(t *testing.T) {
 	var yaml strings.Builder
 	yaml.WriteString("%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n")
