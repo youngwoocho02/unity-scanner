@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 var Version = "dev"
@@ -46,6 +47,7 @@ func Execute(args []string) error {
 type commonOptions struct {
 	project   string
 	lineWidth int
+	profile   bool
 }
 
 func addCommonFlags(fs *flag.FlagSet, opts *commonOptions) {
@@ -53,6 +55,7 @@ func addCommonFlags(fs *flag.FlagSet, opts *commonOptions) {
 	fs.StringVar(&opts.project, "project", "", "Unity project path")
 	fs.StringVar(&opts.project, "p", "", "Unity project path")
 	fs.IntVar(&opts.lineWidth, "line-width", opts.lineWidth, "max output line width, 0 disables truncation")
+	fs.BoolVar(&opts.profile, "profile", false, "print command timing profile")
 }
 
 func lineLimit(opts commonOptions) int {
@@ -141,6 +144,52 @@ func containsFold(s, needle string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(needle))
 }
 
+type commandProfileStep struct {
+	name    string
+	elapsed time.Duration
+}
+
+type commandProfile struct {
+	enabled bool
+	start   time.Time
+	last    time.Time
+	steps   []commandProfileStep
+}
+
+func newCommandProfile(enabled bool) *commandProfile {
+	now := time.Now()
+	return &commandProfile{enabled: enabled, start: now, last: now}
+}
+
+func (p *commandProfile) mark(name string) {
+	if !p.enabled {
+		return
+	}
+	now := time.Now()
+	p.steps = append(p.steps, commandProfileStep{name: name, elapsed: now.Sub(p.last)})
+	p.last = now
+}
+
+func (p *commandProfile) print() {
+	if !p.enabled || len(p.steps) == 0 {
+		return
+	}
+	total := time.Since(p.start)
+	fmt.Println()
+	fmt.Println("PROFILE")
+	for _, step := range p.steps {
+		fmt.Printf("  %-22s %s\n", step.name, formatDuration(step.elapsed))
+	}
+	fmt.Printf("  %-22s %s\n", "total", formatDuration(total))
+}
+
+func formatDuration(d time.Duration) string {
+	if d >= time.Second {
+		return fmt.Sprintf("%.3fs", d.Seconds())
+	}
+	return fmt.Sprintf("%.1fms", float64(d.Microseconds())/1000)
+}
+
 func printHelp(w io.Writer) {
 	fmt.Fprint(w, `unity-scanner scans Unity project assets without opening Unity.
 
@@ -164,6 +213,7 @@ Root options:
 Project commands:
   -p, --project <path>   Unity project path
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
+  --profile              Print command timing profile
 
 Examples:
   unity-scanner help read
@@ -188,6 +238,7 @@ Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
+  --profile              Print command timing profile
 
 Options:
   --depth <n>       directory summary depth, default unlimited
@@ -211,6 +262,7 @@ Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
+  --profile              Print command timing profile
 
 Options:
   --depth <n>          hierarchy depth, default unlimited
@@ -222,7 +274,6 @@ Options:
   --override <text>    only show prefab overrides matching text
   --override-limit <n> max prefab overrides shown, default 40, 0 unlimited
   --no-resolve         skip script, GUID, and source prefab path resolution
-  --profile            print read timing profile
 
 Examples:
   unity-scanner read -p . Assets/Scenes/Main.unity --depth 3
@@ -239,6 +290,7 @@ Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
+  --profile              Print command timing profile
 
 Options:
   --name <text>        match file or GameObject name
@@ -250,6 +302,7 @@ Options:
   --compact           one-line grouped result
   --warnings <mode>    warning output: summary or detail, default summary
   --limit <n>          max result files, default unlimited
+  --object-limit <n>   max objects shown per result file, default 12
 
 Examples:
   unity-scanner search -p . --name Station --type prefab,scene
@@ -263,6 +316,7 @@ Common:
   -p, --project <path>   Unity project path
   -h, --help             Show help
   --line-width <n>       Max output line width, default 1200, 0 disables truncation
+  --profile              Print command timing profile
 
 Options:
   --type <list>        prefab,scene,asset,mat,controller

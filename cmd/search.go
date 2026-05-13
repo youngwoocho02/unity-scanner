@@ -26,6 +26,7 @@ type searchOptions struct {
 	compact      bool
 	warningsMode string
 	limit        int
+	objectLimit  int
 	rootPath     string
 	scriptScoped bool
 	refDetail    bool
@@ -68,7 +69,7 @@ const textSearchChunkSize = 1024 * 1024
 var currentSearchLineWidth = 1200
 
 func searchCmd(args []string) error {
-	opts := searchOptions{}
+	opts := searchOptions{objectLimit: 12}
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	addCommonFlags(fs, &opts.commonOptions)
 	fs.StringVar(&opts.name, "name", "", "file or GameObject name")
@@ -80,6 +81,7 @@ func searchCmd(args []string) error {
 	fs.BoolVar(&opts.compact, "compact", false, "compact output")
 	fs.StringVar(&opts.warningsMode, "warnings", "summary", "warning output: summary or detail")
 	fs.IntVar(&opts.limit, "limit", opts.limit, "max result files")
+	fs.IntVar(&opts.objectLimit, "object-limit", opts.objectLimit, "max objects shown per result file")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
 			printTopicHelp(os.Stdout, "search")
@@ -93,6 +95,7 @@ func searchCmd(args []string) error {
 	if opts.name == "" && opts.component == "" && opts.scriptPath == "" && opts.guid == "" {
 		return fmt.Errorf("search requires --name, --component, --script-path, --guid, or --ref")
 	}
+	profile := newCommandProfile(opts.profile)
 
 	target := "Assets"
 	if fs.NArg() > 0 {
@@ -103,6 +106,7 @@ func searchCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	profile.mark("open_project")
 	kinds := unityasset.ParseKindSet(opts.types)
 	kinds = defaultSearchKinds(kinds, opts)
 	result, err := unityasset.Scan(project, target, unityasset.ScanOptions{
@@ -111,6 +115,7 @@ func searchCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	profile.mark("scan")
 
 	scripts := unityasset.ScriptIndex{}
 	if opts.scriptPath != "" {
@@ -126,10 +131,14 @@ func searchCmd(args []string) error {
 		}
 		opts.scriptScoped = true
 	}
+	profile.mark("build_script_index")
 
 	_, opts.rootPath, _ = project.Resolve(target)
 	matches, warnings := runSearch(project, result.Files, scripts, opts)
+	profile.mark("search_files")
 	printSearch(matches, result.KindCount, opts, warnings)
+	profile.mark("print")
+	profile.print()
 	return nil
 }
 
@@ -379,7 +388,7 @@ func printSearchDetailed(matches []searchMatch, opts searchOptions) {
 	for _, group := range groupSearchMatches(matches) {
 		fmt.Printf("[%s] %s\n", group.Kind, compactGroupDir(group.Dir, opts.rootPath))
 		for _, match := range group.Matches {
-			printSearchMatch(match)
+			printSearchMatch(match, opts)
 		}
 	}
 }
@@ -406,7 +415,7 @@ func groupSearchMatches(matches []searchMatch) []searchMatchGroup {
 	return groups
 }
 
-func printSearchMatch(match searchMatch) {
+func printSearchMatch(match searchMatch, opts searchOptions) {
 	fmt.Printf("  %s\n", match.File.Name)
 	if match.FileNameHit {
 		fmt.Println("    file-name")
@@ -427,8 +436,11 @@ func printSearchMatch(match searchMatch) {
 		}
 	}
 	objectLimit := len(match.Objects)
-	if objectLimit > 12 {
-		objectLimit = 12
+	if objectLimit > opts.objectLimit {
+		objectLimit = opts.objectLimit
+	}
+	if objectLimit < 0 {
+		objectLimit = 0
 	}
 	for _, obj := range match.Objects[:objectLimit] {
 		printfLineLimited(currentSearchLineWidth, "    object: %s", obj.Path)

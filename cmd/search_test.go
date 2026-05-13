@@ -357,6 +357,85 @@ func TestPrintSearchWarningsSummary(t *testing.T) {
 	}
 }
 
+func TestSearchCmdObjectLimitControlsPerFileObjects(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Many.prefab"), `%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  m_Name: TargetA
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!1 &101
+GameObject:
+  m_Component:
+  - component: {fileID: 201}
+  m_Name: TargetB
+--- !u!4 &201
+Transform:
+  m_GameObject: {fileID: 101}
+  m_Father: {fileID: 0}
+--- !u!1 &102
+GameObject:
+  m_Component:
+  - component: {fileID: 202}
+  m_Name: TargetC
+--- !u!4 &202
+Transform:
+  m_GameObject: {fileID: 102}
+  m_Father: {fileID: 0}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := searchCmd([]string{"-p", dir, "Assets", "--name", "Target", "--type", "prefab", "--object-limit", "1"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "object: TargetA") || !strings.Contains(out, "more objects: 2 hidden") {
+		t.Fatalf("object limit output missing:\n%s", out)
+	}
+	if strings.Contains(out, "object: TargetB") || strings.Contains(out, "object: TargetC") {
+		t.Fatalf("object limit leaked hidden objects:\n%s", out)
+	}
+}
+
+func TestSearchCmdProfilePrintsTiming(t *testing.T) {
+	dir := t.TempDir()
+	assets := filepath.Join(dir, "Assets")
+	writeTestFile(t, filepath.Join(assets, "Item.prefab"), `%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  m_Name: Target
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+`)
+
+	var buf bytes.Buffer
+	restoreStdout := captureStdout(&buf)
+	err := searchCmd([]string{"-p", dir, "Assets", "--name", "Target", "--type", "prefab", "--profile"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, expected := range []string{"PROFILE", "scan", "search_files", "total"} {
+		if !strings.Contains(out, expected) {
+			t.Fatalf("profile missing %q:\n%s", expected, out)
+		}
+	}
+}
+
 func TestRunSearchParallelKeepsOrderAndWarnings(t *testing.T) {
 	dir := t.TempDir()
 	assets := filepath.Join(dir, "Assets")

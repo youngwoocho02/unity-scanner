@@ -39,17 +39,20 @@ func refsCmd(args []string) error {
 	if fs.NArg() == 0 {
 		return fmt.Errorf("refs requires an asset path or GUID")
 	}
+	profile := newCommandProfile(opts.profile)
 
 	project, err := unityasset.OpenProject(opts.project)
 	if err != nil {
 		return err
 	}
+	profile.mark("open_project")
 
 	target := fs.Arg(0)
 	guid, label, err := resolveRefGUID(project, target)
 	if err != nil {
 		return err
 	}
+	profile.mark("resolve_ref")
 
 	scanPath := "Assets"
 	if fs.NArg() > 1 {
@@ -61,6 +64,7 @@ func refsCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	profile.mark("scan")
 
 	searchOpts := searchOptions{
 		guid:          guid,
@@ -68,6 +72,7 @@ func refsCmd(args []string) error {
 		compact:       !opts.detail,
 		warningsMode:  opts.warningsMode,
 		limit:         opts.limit,
+		objectLimit:   12,
 		refDetail:     opts.detail,
 		commonOptions: commonOptions{lineWidth: opts.lineWidth},
 	}
@@ -79,11 +84,15 @@ func refsCmd(args []string) error {
 			return err
 		}
 	}
+	profile.mark("build_script_index")
 	matches, warnings := runSearch(project, result.Files, scripts, searchOpts)
+	profile.mark("search_files")
 
 	printfLineLimited(opts.lineWidth, "REF     %s", label)
 	fmt.Printf("GUID    %s\n\n", guid)
 	printSearch(matches, result.KindCount, searchOpts, warnings)
+	profile.mark("print")
+	profile.print()
 	return nil
 }
 

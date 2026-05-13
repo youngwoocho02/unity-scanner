@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/youngwoocho02/unity-scanner/internal/format"
 	"github.com/youngwoocho02/unity-scanner/internal/unityasset"
@@ -23,7 +22,6 @@ type readOptions struct {
 	overrideFilter string
 	overrideLimit  int
 	noResolve      bool
-	profile        bool
 }
 
 func readCmd(args []string) error {
@@ -39,7 +37,6 @@ func readCmd(args []string) error {
 	fs.StringVar(&opts.overrideFilter, "override", "", "prefab override filter")
 	fs.IntVar(&opts.overrideLimit, "override-limit", opts.overrideLimit, "max prefab overrides shown, 0 for unlimited")
 	fs.BoolVar(&opts.noResolve, "no-resolve", false, "skip script, GUID, and source prefab path resolution")
-	fs.BoolVar(&opts.profile, "profile", false, "print read timing profile")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
 			printTopicHelp(os.Stdout, "read")
@@ -51,28 +48,18 @@ func readCmd(args []string) error {
 		return fmt.Errorf("read requires an asset path")
 	}
 
-	profileStart := time.Now()
-	profileLast := profileStart
-	profile := readProfile{}
-	mark := func(name string) {
-		if !opts.profile {
-			return
-		}
-		now := time.Now()
-		profile.add(name, now.Sub(profileLast))
-		profileLast = now
-	}
+	profile := newCommandProfile(opts.profile)
 
 	project, err := unityasset.OpenProject(opts.project)
 	if err != nil {
 		return err
 	}
-	mark("open_project")
+	profile.mark("open_project")
 	abs, _, err := project.Resolve(fs.Arg(0))
 	if err != nil {
 		return err
 	}
-	mark("resolve_path")
+	profile.mark("resolve_path")
 	info, err := os.Stat(abs)
 	if err != nil {
 		return err
@@ -80,7 +67,7 @@ func readCmd(args []string) error {
 	if info.IsDir() {
 		return fmt.Errorf("read requires a file, got directory: %s", filepath.ToSlash(fs.Arg(0)))
 	}
-	mark("stat_path")
+	profile.mark("stat_path")
 	result, err := unityasset.Scan(project, fs.Arg(0), unityasset.ScanOptions{})
 	if err != nil {
 		return err
@@ -92,13 +79,13 @@ func readCmd(args []string) error {
 	if !unityasset.KnownUnityYAMLKind(entry.Kind) {
 		return fmt.Errorf("read supports Unity YAML assets, got %s", entry.Kind)
 	}
-	mark("scan_asset")
+	profile.mark("scan_asset")
 
 	asset, err := unityasset.ReadAsset(entry, unityasset.ScriptIndex{})
 	if err != nil {
 		return err
 	}
-	mark("read_asset")
+	profile.mark("read_asset")
 
 	sourceGUIDs := []string(nil)
 	scriptGUIDs := asset.ScriptGUIDs()
@@ -128,11 +115,11 @@ func readCmd(args []string) error {
 		}
 		asset.GUIDIndex = resolved
 	}
-	mark("resolve_initial_guids")
+	profile.mark("resolve_initial_guids")
 	roots := asset.Hierarchy()
 	flat := flattenHierarchy(roots)
 	components := buildReadComponentView(asset, flat)
-	mark("build_hierarchy")
+	profile.mark("build_hierarchy")
 	if !opts.noResolve {
 		fieldGUIDs := fieldReferenceGUIDs(asset, flat, components, opts)
 		removeKnownGUIDs(fieldGUIDs, resolved)
@@ -144,10 +131,10 @@ func readCmd(args []string) error {
 			mergeGUIDIndex(asset.GUIDIndex, guidIndex)
 		}
 	}
-	mark("resolve_field_guids")
+	profile.mark("resolve_field_guids")
 	printRead(asset, roots, flat, components, opts)
-	mark("print")
-	profile.print(profileStart)
+	profile.mark("print")
+	profile.print()
 	return nil
 }
 
@@ -708,37 +695,6 @@ func sourcePaths(guids []string, index unityasset.GUIDIndex) []string {
 		out = append(out, path)
 	}
 	return out
-}
-
-type readProfileStep struct {
-	name    string
-	elapsed time.Duration
-}
-
-type readProfile []readProfileStep
-
-func (p *readProfile) add(name string, elapsed time.Duration) {
-	*p = append(*p, readProfileStep{name: name, elapsed: elapsed})
-}
-
-func (p readProfile) print(start time.Time) {
-	if len(p) == 0 {
-		return
-	}
-	total := time.Since(start)
-	fmt.Println()
-	fmt.Println("PROFILE")
-	for _, step := range p {
-		fmt.Printf("  %-22s %s\n", step.name, formatDuration(step.elapsed))
-	}
-	fmt.Printf("  %-22s %s\n", "total", formatDuration(total))
-}
-
-func formatDuration(d time.Duration) string {
-	if d >= time.Second {
-		return fmt.Sprintf("%.3fs", d.Seconds())
-	}
-	return fmt.Sprintf("%.1fms", float64(d.Microseconds())/1000)
 }
 
 func printSourceHint(asset *unityasset.Asset, lineWidth int) {

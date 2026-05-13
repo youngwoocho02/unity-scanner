@@ -82,6 +82,7 @@ Project command option:
 ```text
 -p, --project <path>   Unity project path
 --line-width <n>       Max output line width, default 1200, 0 disables truncation
+--profile              Print command timing profile
 ```
 
 Command aliases: `ls` = `list`, `cat` = `read`, `find` = `search`.
@@ -397,7 +398,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --override <text>    only show prefab overrides matching text
 --override-limit <n> max prefab overrides shown, default 40, 0 unlimited
 --no-resolve         skip script, GUID, and source prefab path resolution
---profile            print read timing profile
+--profile            print command timing profile
 ```
 
 ### search
@@ -412,6 +413,7 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --compact            one-line grouped result
 --warnings <mode>    summary or detail, default summary
 --limit <n>          max result files, default unlimited
+--object-limit <n>   max objects shown per result file, default 12
 ```
 
 ### refs

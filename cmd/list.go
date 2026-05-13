@@ -42,11 +42,13 @@ func listCmd(args []string) error {
 	if fs.NArg() > 0 {
 		target = fs.Arg(0)
 	}
+	profile := newCommandProfile(opts.profile)
 
 	project, err := unityasset.OpenProject(opts.project)
 	if err != nil {
 		return err
 	}
+	profile.mark("open_project")
 	result, err := unityasset.Scan(project, target, unityasset.ScanOptions{
 		Kinds:       unityasset.ParseKindSet(opts.kind),
 		IncludeMeta: opts.includeMeta,
@@ -54,8 +56,11 @@ func listCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	profile.mark("scan")
 	_, rootPath, _ := project.Resolve(target)
 	printList(rootPath, result, opts)
+	profile.mark("print")
+	profile.print()
 	return nil
 }
 

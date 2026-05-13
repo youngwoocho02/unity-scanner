@@ -82,6 +82,7 @@ unity-scanner version
 ```text
 -p, --project <path>   Unity プロジェクトのパス
 --line-width <n>       出力 1 行の最大幅。既定 1200、0 で切り詰め無効
+--profile              コマンドの段階別 timing profile を出力
 ```
 
 コマンド別名: `ls` = `list`, `cat` = `read`, `find` = `search`
@@ -412,6 +413,7 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 --compact            1 行のグループ結果を出力
 --warnings <mode>    警告出力方式: summary または detail。既定は summary
 --limit <n>          最大結果ファイル数。既定は無制限
+--object-limit <n>   結果ファイルごとの最大オブジェクト表示数。既定は 12
 ```
 
 ### refs

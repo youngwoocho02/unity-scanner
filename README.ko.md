@@ -82,6 +82,7 @@ unity-scanner version
 ```text
 -p, --project <path>   Unity 프로젝트 경로
 --line-width <n>       출력 한 줄 최대 폭, 기본 1200, 0이면 자르지 않음
+--profile              명령 단계별 시간 프로파일 출력
 ```
 
 명령 별칭: `ls` = `list`, `cat` = `read`, `find` = `search`
@@ -412,6 +413,7 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --compact            한 줄 그룹 결과 출력
 --warnings <mode>    경고 출력 방식: summary 또는 detail, 기본 summary
 --limit <n>          최대 결과 파일 수, 기본 무제한
+--object-limit <n>   결과 파일별 최대 오브젝트 표시 수, 기본 12
 ```
 
 ### refs
