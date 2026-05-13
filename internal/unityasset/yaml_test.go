@@ -303,6 +303,33 @@ func TestFieldsWithHidden(t *testing.T) {
 	}
 }
 
+func TestFieldsResolveLocalFileIDReferences(t *testing.T) {
+	asset, err := ParseAsset([]byte(`%YAML 1.1
+--- !u!1 &100
+GameObject:
+  m_Component:
+  - component: {fileID: 200}
+  m_Name: Root
+--- !u!4 &200
+Transform:
+  m_GameObject: {fileID: 100}
+  m_Father: {fileID: 0}
+--- !u!114 &300
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Name: Controller
+  target: {fileID: 200}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fields := asset.Fields(asset.ByID["300"], 0)
+	if len(fields) != 1 || !strings.Contains(fields[0].Value, "Transform on Root") {
+		t.Fatalf("fields=%#v", fields)
+	}
+}
+
 func TestFieldReferencesScansFullNestedField(t *testing.T) {
 	asset, err := ParseAsset([]byte(`%YAML 1.1
 --- !u!114 &11400000

@@ -443,28 +443,55 @@ func DisplayFieldName(name string) string {
 }
 
 func (a *Asset) ResolveReferences(value string) string {
-	if len(a.GUIDIndex) == 0 {
-		return value
-	}
 	guids := findGUIDs(value)
-	if len(guids) == 0 {
-		return value
-	}
-
 	paths := make([]string, 0, len(guids))
 	seen := map[string]bool{}
-	for _, guid := range guids {
-		path := a.GUIDIndex[guid]
-		if path == "" || seen[path] {
+	if len(a.GUIDIndex) > 0 {
+		for _, guid := range guids {
+			path := a.GUIDIndex[guid]
+			if path == "" || seen[path] {
+				continue
+			}
+			seen[path] = true
+			paths = append(paths, path)
+		}
+	}
+	for _, fileID := range findFileIDs(value) {
+		label := a.LocalReferenceLabel(fileID)
+		if label == "" || seen[label] {
 			continue
 		}
-		seen[path] = true
-		paths = append(paths, path)
+		seen[label] = true
+		paths = append(paths, label)
 	}
 	if len(paths) == 0 {
 		return value
 	}
 	return value + " -> " + strings.Join(paths, ", ")
+}
+
+func (a *Asset) LocalReferenceLabel(fileID string) string {
+	if fileID == "" || fileID == "0" {
+		return ""
+	}
+	obj := a.ByID[fileID]
+	if obj == nil {
+		return ""
+	}
+	if obj.Type == "GameObject" {
+		return a.ObjectPath(obj.ID)
+	}
+	name, _ := a.ComponentName(obj)
+	if obj.GameObjectID != "" {
+		path := a.ObjectPath(obj.GameObjectID)
+		if path != "" {
+			return name + " on " + path
+		}
+	}
+	if obj.Name != "" {
+		return name + " " + obj.Name
+	}
+	return name + " " + obj.ID
 }
 
 func summarizeNested(lines []string, start int) string {
@@ -1213,6 +1240,32 @@ func findGUIDs(value string) []string {
 			out = append(out, guid)
 			offset += len(guid)
 		}
+	}
+	return out
+}
+
+func findFileIDs(value string) []string {
+	var out []string
+	for offset := 0; offset < len(value); {
+		start := strings.Index(value[offset:], "fileID:")
+		if start < 0 {
+			break
+		}
+		offset += start + len("fileID:")
+		for offset < len(value) && value[offset] == ' ' {
+			offset++
+		}
+		begin := offset
+		if offset < len(value) && value[offset] == '-' {
+			offset++
+		}
+		for offset < len(value) && value[offset] >= '0' && value[offset] <= '9' {
+			offset++
+		}
+		if offset == begin || (value[begin] == '-' && offset == begin+1) {
+			continue
+		}
+		out = append(out, value[begin:offset])
 	}
 	return out
 }
