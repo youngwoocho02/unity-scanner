@@ -49,11 +49,12 @@ func TestTopicHelpIncludesCommonFlagsAndExamples(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{[]string{"help", "list"}, []string{"Usage:\n  unity-scanner list", "Aliases:\n  ls", "-p, --project <path>", "unity-scanner ls -p ."}},
+		{[]string{"help", "list"}, []string{"Usage:\n  unity-scanner list", "Aliases:\n  ls", "-p, --project <path>", "Details:", "--flat skips the directory summary", "unity-scanner ls -p ."}},
 		{[]string{"read", "--help"}, []string{"Usage:\n  unity-scanner read", "Aliases:\n  cat", "--full-tree", "Details:", "SOURCE_MATCHES", "--ref-format path", "unity-scanner cat -p ."}},
-		{[]string{"search", "Assets", "--help"}, []string{"Usage:\n  unity-scanner search", "Aliases:\n  find", "--ref <guid>", "unity-scanner find -p ."}},
-		{[]string{"refs", "-h"}, []string{"Usage:\n  unity-scanner refs", "-p, --project <path>", "--detail", "0123456789abcdef0123456789abcdef"}},
-		{[]string{"update", "--help"}, []string{"Usage:\n  unity-scanner update", "-h, --help", "--check", "unity-scanner update --check"}},
+		{[]string{"search", "Assets", "--help"}, []string{"Usage:\n  unity-scanner search", "Aliases:\n  find", "--ref <guid>", "Search requires at least one filter", "--compact is best for the first pass", "unity-scanner find -p ."}},
+		{[]string{"refs", "-h"}, []string{"Usage:\n  unity-scanner refs", "-p, --project <path>", "--detail", "Target can be an asset path", "Use refs for \"who points to this asset or GUID\"", "0123456789abcdef0123456789abcdef"}},
+		{[]string{"update", "--help"}, []string{"Usage:\n  unity-scanner update", "-h, --help", "--check", "does not replace the binary", "unity-scanner update --check"}},
+		{[]string{"help", "version"}, []string{"Usage:\n  unity-scanner version", "unity-scanner --version", "Print the current CLI version"}},
 	}
 
 	for _, tt := range tests {

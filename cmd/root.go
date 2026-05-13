@@ -251,6 +251,14 @@ Options:
   --flat            omit directory summary, print grouped names only
   --limit <n>       max groups, default unlimited
 
+Details:
+  Path defaults to Assets when omitted.
+  Use --kind to narrow file types before read/search/refs.
+  --depth controls the directory summary, not recursive scanning.
+  --flat skips the directory summary and prints grouped file names only.
+  --meta includes .meta rows; keep it off unless GUID/meta files matter.
+  Use --limit to cap printed groups, and --profile when scan time matters.
+
 Examples:
   unity-scanner list -p . Assets --depth 2
   unity-scanner ls -p . Assets/Prefabs --kind prefab --flat
@@ -326,6 +334,17 @@ Options:
   --limit <n>          max result files, default unlimited
   --object-limit <n>   max objects shown per result file, default 12
 
+Details:
+  Search requires at least one filter: --name, --component, --script-path, --source, --guid, or --ref.
+  Use --name for file names and GameObject names.
+  Use --component for native components or MonoBehaviour script names.
+  Use --script-path to limit MonoBehaviour matches to scripts under a folder.
+  Use --source to find prefab variants or nested prefabs by source prefab path/name.
+  Use --guid/--ref to find raw Unity GUID references.
+  --compact is best for the first pass; omit it when object/component context matters.
+  --object-limit caps object rows per matched file.
+  Use --warnings detail when skipped or malformed YAML needs inspection.
+
 Examples:
   unity-scanner search -p . --name Station --type prefab,scene
   unity-scanner find -p . Assets --component GameManager --compact
@@ -347,6 +366,15 @@ Options:
   --warnings <mode>    warning output: summary or detail, default summary
   --limit <n>          max result files, default unlimited
 
+Details:
+  Target can be an asset path with a .meta file or a raw Unity GUID.
+  Scan path defaults to Assets when omitted.
+  Use refs for "who points to this asset or GUID".
+  Default output is compact and grouped by referencing asset.
+  Use --detail to print object/component/field/value context.
+  Use --type to narrow scan cost and noise.
+  Use --warnings detail when skipped or malformed YAML needs inspection.
+
 Examples:
   unity-scanner refs -p . Assets/Scripts/Foo.cs
   unity-scanner refs -p . 0123456789abcdef0123456789abcdef Assets/Prefabs
@@ -361,9 +389,24 @@ Options:
   -h, --help            Show help
   --check              Check for updates without installing
 
+Details:
+  --check only reports the newest release and does not replace the binary.
+  update downloads the latest GitHub release for the current OS/arch.
+  After update, run unity-scanner version to confirm the installed version.
+  Project scan commands do not create persistent update caches.
+
 Examples:
   unity-scanner update
   unity-scanner update --check
+  unity-scanner version
+`)
+	case "version":
+		fmt.Fprint(w, `Usage:
+  unity-scanner version
+  unity-scanner --version
+  unity-scanner -v
+
+Print the current CLI version.
 `)
 	default:
 		printHelp(w)
