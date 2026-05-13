@@ -403,6 +403,8 @@ The target asset path is resolved once. Results are grouped by asset type and fo
 --no-resolve         skip script, GUID, and source prefab path resolution
 ```
 
+When `read` reports `PREFAB_SOURCES`, the view is local serialized YAML. Source or nested prefab contents are not expanded; use source prefab reads or Unity `LoadPrefabContents` for the editor-resolved state.
+
 ### search
 
 ```text

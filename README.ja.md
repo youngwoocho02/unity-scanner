@@ -403,6 +403,8 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 --no-resolve         script、GUID、source prefab path の解決を省略
 ```
 
+`read` が `PREFAB_SOURCES` を表示する場合、そのビューは local serialized YAML 基準です。source/nested prefab の内容は展開しないため、source prefab を読むか Unity `LoadPrefabContents` で editor-resolved state を確認します。
+
 ### search
 
 ```text

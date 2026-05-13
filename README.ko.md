@@ -403,6 +403,8 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 --no-resolve         script, GUID, source prefab 경로 해석 생략
 ```
 
+`read`가 `PREFAB_SOURCES`를 표시하면 로컬 직렬화 YAML 기준이다. source/nested prefab 내용은 펼치지 않으므로 source prefab을 같이 읽거나 Unity `LoadPrefabContents`로 Editor-resolved 상태를 확정한다.
+
 ### search
 
 ```text

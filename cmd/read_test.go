@@ -228,7 +228,7 @@ MonoBehaviour:
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, want := range []string{"PREFAB_SOURCES Assets", "  . :: Base", "BaseCycleTime"} {
+	for _, want := range []string{"PREFAB_SOURCES Assets", "  . :: Base", "RESOLUTION  local prefab YAML only", "VERIFY      use unity-cli LoadPrefabContents", "BaseCycleTime"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
@@ -417,7 +417,7 @@ Transform:
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, want := range []string{"prefab sources: Assets", "  . :: Base", "hint: read source prefabs"} {
+	for _, want := range []string{"prefab sources: Assets", "  . :: Base", "hint: current read is local prefab YAML", "hint: read source prefabs or verify with unity-cli LoadPrefabContents"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}

@@ -210,6 +210,7 @@ func printRead(asset *unityasset.Asset, roots []*unityasset.Node, flat []*unitya
 	}
 	if opts.component == "" && len(asset.SourcePaths) > 0 {
 		printPathGroupSection("PREFAB_SOURCES", asset.SourcePaths, opts.lineWidth)
+		printResolvedStateNotice()
 	}
 	if len(flat) == 0 {
 		fmt.Printf("YAML_OBJECTS %d\n", len(asset.Objects))
@@ -812,7 +813,13 @@ func printSourceHint(asset *unityasset.Asset, lineWidth int) {
 		return
 	}
 	printPathGroupSection("prefab sources:", asset.SourcePaths, lineWidth)
-	fmt.Println("hint: read source prefabs to inspect nested or inherited components")
+	fmt.Println("hint: current read is local prefab YAML; source/nested contents are not expanded")
+	fmt.Println("hint: read source prefabs or verify with unity-cli LoadPrefabContents for Unity-resolved state")
+}
+
+func printResolvedStateNotice() {
+	fmt.Println("RESOLUTION  local prefab YAML only; source/nested contents are not expanded")
+	fmt.Println("VERIFY      use unity-cli LoadPrefabContents for Unity-resolved prefab state")
 }
 
 func displayObjectName(obj *unityasset.Object) string {
