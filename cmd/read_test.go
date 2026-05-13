@@ -480,12 +480,33 @@ BoxCollider:
 	fullOut := fullBuf.String()
 	for _, want := range []string{
 		"OVERRIDES",
+		"property m_IsActive=0",
+		"removed-components",
+		"added-component BoxCollider",
+	} {
+		if !strings.Contains(fullOut, want) {
+			t.Fatalf("missing %q in:\n%s", want, fullOut)
+		}
+	}
+	if strings.Contains(fullOut, "guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") {
+		t.Fatalf("default override output leaked raw target:\n%s", fullOut)
+	}
+
+	var rawBuf bytes.Buffer
+	restoreStdout = captureStdout(&rawBuf)
+	err = readCmd([]string{"-p", dir, "Assets/Variant.prefab", "--raw-overrides"})
+	restoreStdout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawOut := rawBuf.String()
+	for _, want := range []string{
 		"property {fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3} m_IsActive=0",
 		"removed-components {fileID: 300, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3}",
 		"added-component target={fileID: 200, guid: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, type: 3} added={fileID: 400}",
 	} {
-		if !strings.Contains(fullOut, want) {
-			t.Fatalf("missing %q in:\n%s", want, fullOut)
+		if !strings.Contains(rawOut, want) {
+			t.Fatalf("raw override missing %q in:\n%s", want, rawOut)
 		}
 	}
 }

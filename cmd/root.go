@@ -279,6 +279,7 @@ Options:
   --full-tree          show every visible tree row without render-only folding
   --override <text>    only show prefab overrides matching text
   --override-limit <n> max prefab overrides shown, default 40, 0 unlimited
+  --raw-overrides      show raw prefab override target references
   --no-resolve         skip script, GUID, and source prefab path resolution
 
 Examples:

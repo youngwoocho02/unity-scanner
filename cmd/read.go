@@ -22,6 +22,7 @@ type readOptions struct {
 	fullTree       bool
 	overrideFilter string
 	overrideLimit  int
+	rawOverrides   bool
 	noResolve      bool
 }
 
@@ -38,6 +39,7 @@ func readCmd(args []string) error {
 	fs.BoolVar(&opts.fullTree, "full-tree", false, "show every visible tree row without render-only folding")
 	fs.StringVar(&opts.overrideFilter, "override", "", "prefab override filter")
 	fs.IntVar(&opts.overrideLimit, "override-limit", opts.overrideLimit, "max prefab overrides shown, 0 for unlimited")
+	fs.BoolVar(&opts.rawOverrides, "raw-overrides", false, "show raw prefab override target references")
 	fs.BoolVar(&opts.noResolve, "no-resolve", false, "skip script, GUID, and source prefab path resolution")
 	if err := parse(fs, args); err != nil {
 		if err == flag.ErrHelp {
@@ -621,16 +623,65 @@ func printPrefabOverrides(asset *unityasset.Asset, opts readOptions) {
 	for _, override := range overrides[:limit] {
 		switch override.Kind {
 		case "property":
-			printfLineLimited(opts.lineWidth, "  property %s %s=%s", override.Target, override.PropertyPath, override.Value)
+			if opts.rawOverrides {
+				printfLineLimited(opts.lineWidth, "  property %s %s=%s", override.Target, override.PropertyPath, override.Value)
+			} else {
+				printfLineLimited(opts.lineWidth, "  property %s=%s", override.PropertyPath, prefabOverrideDisplayValue(override.Value))
+			}
 		case "added-component":
-			printfLineLimited(opts.lineWidth, "  added-component target=%s added=%s", override.Target, override.AddedObject)
+			if opts.rawOverrides {
+				printfLineLimited(opts.lineWidth, "  added-component target=%s added=%s", override.Target, override.AddedObject)
+			} else {
+				printfLineLimited(opts.lineWidth, "  added-component %s", prefabOverrideReferenceLabel(asset, override.AddedObject))
+			}
 		default:
-			printfLineLimited(opts.lineWidth, "  %s %s", override.Kind, override.Target)
+			if opts.rawOverrides {
+				printfLineLimited(opts.lineWidth, "  %s %s", override.Kind, override.Target)
+			} else {
+				printfLineLimited(opts.lineWidth, "  %s", override.Kind)
+			}
 		}
 	}
 	if hidden > 0 {
 		fmt.Printf("  more overrides: %d hidden by --override-limit\n", hidden)
 	}
+}
+
+func prefabOverrideDisplayValue(value string) string {
+	if strings.TrimSpace(value) == "{fileID: 0}" {
+		return "null"
+	}
+	return value
+}
+
+func prefabOverrideReferenceLabel(asset *unityasset.Asset, value string) string {
+	if label := asset.LocalReferenceLabel(prefabOverrideFileID(value)); label != "" {
+		return label
+	}
+	return prefabOverrideDisplayValue(value)
+}
+
+func prefabOverrideFileID(value string) string {
+	const marker = "fileID:"
+	index := strings.Index(value, marker)
+	if index < 0 {
+		return ""
+	}
+	i := index + len(marker)
+	for i < len(value) && value[i] == ' ' {
+		i++
+	}
+	start := i
+	if i < len(value) && value[i] == '-' {
+		i++
+	}
+	for i < len(value) && value[i] >= '0' && value[i] <= '9' {
+		i++
+	}
+	if i == start || (i == start+1 && value[start] == '-') {
+		return ""
+	}
+	return value[start:i]
 }
 
 func filterPrefabOverrides(overrides []unityasset.PrefabOverride, filter string) []unityasset.PrefabOverride {
