@@ -25,7 +25,8 @@
 
 ## 設計
 
-- 現在のファイルだけ読む。cache なし、Editor state 依存なし
+- CLI は現在のファイルだけ読む。cache なし、必須 Editor state 依存なし
+- 任意の Unity Editor package は、変更された asset を file scan 向けに serialized 状態へ保つ
 - Unity 構造を使う。階層、コンポーネントグループ、GUID、パスグループ
 - デフォルト出力は圧縮優先。繰り返し情報は一度だけ宣言し、省略数は表示
 - 大きな scan はファイル単位で並列処理
@@ -48,6 +49,20 @@ irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install
 ```
 
 installer は latest release binary を download し、install directory を `PATH` に追加する。install 後の command は `unity-scanner ...` で実行する。
+
+### Unity Editor package
+
+Unity が変更された YAML asset を scanner が読みやすい状態へ自動 reserialize する必要がある場合、package に追加する。
+
+```json
+{
+  "dependencies": {
+    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync#sync/v0.1.0"
+  }
+}
+```
+
+この package は Editor 専用。import または move された asset を検知し、待機中の Unity YAML asset を小さな batch で安全に reserialize し、状態を `Library/UnityScannerSync/` 以下に書く。
 
 ### update
 
@@ -443,9 +458,9 @@ unity-scanner refs: 約 10行,  260文字, 約  65トークン
 
 cache は繰り返し scan を速くできるが、invalidation と stale result の問題が出る。この tool は単純に保つ。command を受け取り、現在の file を読み、compact な結果を出す。
 
-### Editor 接続なし
+### 必須 Editor 接続なし
 
-Unity Editor に接続すればより豊富な type 情報を得られる。しかし open project、connector、Editor state に依存する。`unity-scanner` は意図的に offline tool として作る。
+Unity Editor に接続すればより豊富な type 情報を得られる。しかし open project、connector、Editor state に依存する。`unity-scanner` はデフォルトで offline tool のままにし、任意の `unity-scanner-sync` package は後で CLI が読む YAML file を最新状態に保つだけにする。
 
 ### 完全な dump より圧縮された map
 

@@ -25,7 +25,8 @@
 
 ## 설계
 
-- 현재 파일만 읽음. 캐시 없음, Editor 상태 의존 없음
+- CLI는 현재 파일만 읽음. 캐시 없음, 필수 Editor 상태 의존 없음
+- 선택 Unity Editor 패키지는 변경된 에셋을 파일 기반 스캔에 맞게 직렬화 상태로 유지
 - Unity 구조 활용. 계층, 컴포넌트 그룹, GUID, 경로 그룹
 - 기본 출력은 압축 우선. 반복 정보는 한 번만 선언하고 생략 개수는 표시
 - 큰 스캔은 파일 단위 병렬 처리
@@ -48,6 +49,20 @@ irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install
 ```
 
 설치 스크립트는 최신 릴리스 바이너리를 받고 설치 디렉터리를 `PATH`에 추가한다. 설치 후 명령은 `unity-scanner ...`로 실행한다.
+
+### Unity Editor 패키지
+
+Unity가 변경된 YAML 에셋을 scanner가 읽기 좋은 상태로 자동 reserialize하게 하려면 패키지에 추가한다.
+
+```json
+{
+  "dependencies": {
+    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync#sync/v0.1.0"
+  }
+}
+```
+
+이 패키지는 Editor 전용이다. import 또는 move된 에셋을 감지하고, 대기 중인 Unity YAML 에셋을 작은 배치로 안전하게 reserialize하며, 상태는 `Library/UnityScannerSync/` 아래에 쓴다.
 
 ### 업데이트
 
@@ -443,9 +458,9 @@ unity-scanner refs: 약 10줄,  260글자, 약  65토큰
 
 캐시는 반복 스캔을 빠르게 만들 수 있지만, 무효화 규칙과 stale 결과 문제가 생긴다. 이 도구는 단순하게 유지한다. 명령을 받으면 현재 파일을 읽고, 압축된 결과를 출력한다.
 
-### Editor 연결 없음
+### 필수 Editor 연결 없음
 
-Unity Editor에 붙으면 더 풍부한 타입 정보를 얻을 수 있다. 대신 열린 프로젝트, connector, Editor 상태에 의존하게 된다. `unity-scanner`는 의도적으로 오프라인 도구다.
+Unity Editor에 붙으면 더 풍부한 타입 정보를 얻을 수 있다. 대신 열린 프로젝트, connector, Editor 상태에 의존하게 된다. `unity-scanner`는 기본적으로 오프라인 도구이고, 선택 `unity-scanner-sync` 패키지는 나중에 CLI가 읽을 YAML 파일을 최신 상태로 유지하는 역할만 한다.
 
 ### 완전한 dump보다 압축 지도 우선
 
