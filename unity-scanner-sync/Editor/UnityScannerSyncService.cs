@@ -14,8 +14,6 @@ namespace UnityScannerSync
         private const float DebounceSeconds = 2f;
         private const int MaxBatchSize = 64;
         private const bool IncludeDependentPrefabs = true;
-        private const int ReferenceScanLogLimit = 12;
-        private const int MaxReferenceExpansionPasses = 8;
         private const string SelfPackagePath = "Packages/com.youngwoocho02.unity-scanner-sync";
 
         private static readonly HashSet<string> PendingPaths = new(StringComparer.Ordinal);
@@ -221,7 +219,6 @@ namespace UnityScannerSync
 
             var started = DateTime.UtcNow;
             WriteSyncLog("analysis-start", BuildAnalysisStartLog(changes));
-            var seedGuids = new HashSet<string>(StringComparer.Ordinal);
             var directlyChangedSerializedAssets = new SortedSet<string>(StringComparer.Ordinal);
             var missingGuidChanges = new List<UnityScannerSyncQueue.ChangeRecord>();
 
@@ -231,47 +228,21 @@ namespace UnityScannerSync
                 if (ShouldReserializeExistingAsset(path))
                     directlyChangedSerializedAssets.Add(path);
 
-                foreach (var guid in CollectReferenceSeedGuids(change))
-                    seedGuids.Add(guid);
-
                 if (string.IsNullOrEmpty(change.guid) && string.IsNullOrEmpty(change.cachedGuid))
                     missingGuidChanges.Add(change);
             }
 
-            var relatedAssets = new List<string>();
-            if (seedGuids.Count > 0)
-                WriteSyncLog("reference-scan-skip", $"Full YAML reference scan skipped. Seed GUIDs: {seedGuids.Count}. Direct YAML and prefab dependency expansion will be reserialized.");
-            foreach (var path in directlyChangedSerializedAssets.Concat(relatedAssets))
+            foreach (var path in directlyChangedSerializedAssets)
                 PendingPaths.Add(path);
 
             var elapsedMs = (DateTime.UtcNow - started).TotalMilliseconds;
             AddDependentPrefabs();
-            var message = BuildAnalysisLog(changes, seedGuids, directlyChangedSerializedAssets, relatedAssets, missingGuidChanges, elapsedMs);
+            var message = BuildAnalysisLog(changes, directlyChangedSerializedAssets, missingGuidChanges, elapsedMs);
             WriteSyncLog("analysis-complete", message);
             UnityScannerSyncQueue.WriteChanges(Array.Empty<UnityScannerSyncQueue.ChangeRecord>());
             SavePending();
             _analysisLoggedForCurrentBatch = true;
             return true;
-        }
-
-        private static List<string> CollectReferenceSeedGuids(UnityScannerSyncQueue.ChangeRecord change)
-        {
-            var path = NormalizePath(change.path);
-            if (ShouldSkipReferenceExpansion(path))
-                return new List<string>();
-
-            var extension = Path.GetExtension(path).ToLowerInvariant();
-            if (extension is ".asmdef" or ".asmref")
-                return CollectAssemblyScriptGuids(path);
-
-            if (!ShouldUseAsReferenceTrigger(path) && string.IsNullOrEmpty(change.cachedGuid))
-                return new List<string>();
-
-            if (!string.IsNullOrEmpty(change.guid))
-                return new List<string> { change.guid };
-            if (!string.IsNullOrEmpty(change.cachedGuid))
-                return new List<string> { change.cachedGuid };
-            return new List<string>();
         }
 
         private static void AddDependentPrefabs()
@@ -344,16 +315,14 @@ namespace UnityScannerSync
 
         private static string BuildAnalysisLog(
             IReadOnlyCollection<UnityScannerSyncQueue.ChangeRecord> changes,
-            IReadOnlyCollection<string> seedGuids,
             IReadOnlyCollection<string> directlyChangedSerializedAssets,
-            IReadOnlyCollection<string> relatedAssets,
             IReadOnlyCollection<UnityScannerSyncQueue.ChangeRecord> missingGuidChanges,
             double elapsedMs)
         {
             var lines = new List<string>
             {
                 $"Change analysis completed in {elapsedMs:0.0} ms.",
-                $"Changed: {changes.Count}, Seed GUIDs: {seedGuids.Count}, Direct YAML: {directlyChangedSerializedAssets.Count}, Related YAML: {relatedAssets.Count}, Pending reserialize: {PendingPaths.Count}"
+                $"Changed: {changes.Count}, Direct YAML: {directlyChangedSerializedAssets.Count}, Pending reserialize: {PendingPaths.Count}"
             };
 
             lines.Add("Changed assets:");
@@ -367,8 +336,6 @@ namespace UnityScannerSync
 
             lines.Add("Direct YAML assets:");
             lines.AddRange(ToBulletLines(directlyChangedSerializedAssets));
-            lines.Add("Related YAML assets:");
-            lines.AddRange(ToBulletLines(relatedAssets));
             lines.Add("Will reserialize:");
             lines.AddRange(ToBulletLines(PendingPaths.OrderBy(path => path, StringComparer.Ordinal)));
             return string.Join("\n", lines);
@@ -454,106 +421,6 @@ namespace UnityScannerSync
             UnityScannerSyncQueue.AppendGuidCache(entries);
         }
 
-        private static List<string> CollectAssemblyScriptGuids(string assemblyPath)
-        {
-            var root = NormalizePath(Path.GetDirectoryName(assemblyPath) ?? "Assets");
-            if (string.IsNullOrEmpty(root))
-                root = "Assets";
-
-            var nestedAssemblyFolders = Directory
-                .EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
-                .Select(NormalizePath)
-                .Where(path => path != assemblyPath && IsAssemblyDefinitionPath(path))
-                .Select(path => NormalizePath(Path.GetDirectoryName(path) ?? string.Empty) + "/")
-                .Where(path => path.Length > 1)
-                .ToArray();
-
-            return Directory
-                .EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
-                .Select(NormalizePath)
-                .Where(path => !nestedAssemblyFolders.Any(folder => path.StartsWith(folder, StringComparison.Ordinal)))
-                .Select(AssetDatabase.AssetPathToGUID)
-                .Where(guid => !string.IsNullOrEmpty(guid))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-        }
-
-        private static List<string> ExpandSerializedAssetsReferencingGuids(IReadOnlyCollection<string> seedGuids)
-        {
-            var pendingGuids = new HashSet<string>(seedGuids, StringComparer.Ordinal);
-            if (pendingGuids.Count == 0)
-                return new List<string>();
-
-            var seenGuids = new HashSet<string>(pendingGuids, StringComparer.Ordinal);
-            var assets = new SortedSet<string>(StringComparer.Ordinal);
-            for (var pass = 0; pass < MaxReferenceExpansionPasses && pendingGuids.Count > 0; pass++)
-            {
-                var passStarted = DateTime.UtcNow;
-                var inputGuidCount = pendingGuids.Count;
-                var referencedAssets = FindSerializedAssetsReferencingGuids(pendingGuids);
-                var nextGuids = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var referencedAsset in referencedAssets)
-                {
-                    assets.Add(referencedAsset);
-                    var guid = AssetDatabase.AssetPathToGUID(referencedAsset);
-                    if (!string.IsNullOrEmpty(guid) && seenGuids.Add(guid))
-                        nextGuids.Add(guid);
-                }
-
-                pendingGuids = nextGuids;
-                var elapsedMs = (DateTime.UtcNow - passStarted).TotalMilliseconds;
-                WriteSyncLog("reference-pass", $"Reference expansion pass completed. Pass: {pass + 1}, Input GUIDs: {inputGuidCount}, Found assets: {referencedAssets.Count}, Next GUIDs: {nextGuids.Count}, ElapsedMs: {elapsedMs:0.0}");
-            }
-
-            if (assets.Count > ReferenceScanLogLimit)
-                WriteSyncLog("reference-scan-sample", "Reference scan sample:\n" + string.Join("\n", assets.Take(ReferenceScanLogLimit).Select(path => "- " + path)));
-
-            return assets.ToList();
-        }
-
-        private static List<string> FindSerializedAssetsReferencingGuids(IReadOnlyCollection<string> guids)
-        {
-            var started = DateTime.UtcNow;
-            var scannedFiles = 0;
-            var referencedAssets = new List<string>();
-            var candidates = Directory
-                .EnumerateFiles("Assets", "*.*", SearchOption.AllDirectories)
-                .Select(NormalizePath)
-                .Where(ShouldReserializeExistingAsset)
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(path => path, StringComparer.Ordinal)
-                .ToList();
-
-            WriteSyncLog("reference-scan-start", $"Reference scan starting. Seed GUIDs: {guids.Count}, Candidate YAML assets: {candidates.Count}");
-            foreach (var path in candidates)
-            {
-                scannedFiles++;
-                if (FileContainsAnyGuid(path, guids))
-                    referencedAssets.Add(path);
-            }
-
-            var elapsedMs = (DateTime.UtcNow - started).TotalMilliseconds;
-            WriteSyncLog("reference-scan-complete", $"Reference scan completed. Scanned: {scannedFiles}, Found: {referencedAssets.Count}, ElapsedMs: {elapsedMs:0.0}");
-            return referencedAssets
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(path => path, StringComparer.Ordinal)
-                .ToList();
-        }
-
-        private static bool FileContainsAnyGuid(string path, IReadOnlyCollection<string> guids)
-        {
-            try
-            {
-                var text = File.ReadAllText(path);
-                return guids.Any(guid => text.Contains(guid, StringComparison.Ordinal));
-            }
-            catch (Exception exception)
-            {
-                WriteSyncLog("reference-read-error", $"{path}\n{exception.Message}");
-                return false;
-            }
-        }
-
         private static bool ShouldQueueSerializedPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -591,12 +458,6 @@ namespace UnityScannerSync
             path = NormalizePath(path);
             return path.Equals(SelfPackagePath, StringComparison.Ordinal)
                    || path.StartsWith(SelfPackagePath + "/", StringComparison.Ordinal);
-        }
-
-        private static bool IsAssemblyDefinitionPath(string path)
-        {
-            var extension = Path.GetExtension(path).ToLowerInvariant();
-            return extension is ".asmdef" or ".asmref";
         }
 
         private static bool ShouldReserializeExistingAsset(string path)
