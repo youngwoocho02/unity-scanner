@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEditor;
 
 namespace UnityScannerSync
@@ -14,10 +13,7 @@ namespace UnityScannerSync
             if (UnityScannerSyncService.IsFlushing)
                 return;
 
-            var paths = new List<string>(importedAssets.Length + movedAssets.Length);
-            paths.AddRange(importedAssets);
-            paths.AddRange(movedAssets);
-            UnityScannerSyncService.EnqueueImportedAssets(paths);
+            UnityScannerSyncService.EnqueueAssetChanges(importedAssets, deletedAssets, movedAssets, movedFromAssetPaths);
         }
     }
 }

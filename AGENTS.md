@@ -18,6 +18,7 @@
 - 패키지만 변경한 경우 CLI 릴리스 태그 `v*`를 새로 만들지 않는다.
 - 패키지 변경 커밋은 패키지 파일, README 설치 문서, 이 규칙 문서를 함께 정리한다.
 - script/asmdef/shader류 트리거는 참조하는 Unity YAML 에셋을 찾아 reserialize 대상으로 확장한다.
+- 삭제/이동된 에셋 참조 추적은 `Library/UnityScannerSync/guid-cache.json`의 path-GUID 캐시를 사용한다.
 - 다른 Unity 프로젝트의 로컬 `file:` 테스트 manifest 변경은 unity-scanner 커밋에 포함하지 않는다.
 
 ## CLI 릴리스 절차
