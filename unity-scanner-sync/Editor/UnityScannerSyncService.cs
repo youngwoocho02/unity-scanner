@@ -134,8 +134,9 @@ namespace UnityScannerSync
                     PendingPaths.Remove(path);
 
                 SavePending();
+                var flushedPaths = string.Join("\n- ", batch);
                 UnityScannerSyncQueue.WriteLog("flush", string.Join("\n", batch));
-                Debug.Log($"[Unity Scanner Sync] Reserialized {batch.Count} asset(s). Pending: {PendingPaths.Count}");
+                Debug.Log($"[Unity Scanner Sync] Reserialized {batch.Count} asset(s). Pending: {PendingPaths.Count}\n- {flushedPaths}");
                 WriteStatus(null, batch.Count);
             }
             catch (Exception exception)
