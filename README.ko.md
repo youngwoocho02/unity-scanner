@@ -57,7 +57,7 @@ Unity가 변경된 YAML 에셋을 scanner가 읽기 좋은 상태로 자동 rese
 ```json
 {
   "dependencies": {
-    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync#sync/v0.1.0"
+    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
   }
 }
 ```

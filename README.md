@@ -57,7 +57,7 @@ Add this package when you want Unity to automatically reserialize changed YAML a
 ```json
 {
   "dependencies": {
-    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync#sync/v0.1.0"
+    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
   }
 }
 ```
