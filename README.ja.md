@@ -52,17 +52,21 @@ installer は latest release binary を download し、install directory を `PA
 
 ### Unity Editor package
 
-Unity が変更された YAML asset を scanner が読みやすい状態へ自動 reserialize する必要がある場合、package に追加する。
+Unity Scanner Sync package は **Package Manager -> Add package from git URL** で追加する。
 
-```json
-{
-  "dependencies": {
-    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
-  }
-}
+```text
+https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync
 ```
 
-この package は Editor 専用。import または move された asset を検知し、待機中の Unity YAML asset を小さな batch で安全に reserialize し、状態を `Library/UnityScannerSync/` 以下に書く。
+または `Packages/manifest.json` に直接追加する。
+
+```json
+"com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
+```
+
+特定バージョンに固定する場合は URL の末尾に tag を付ける。
+
+追加後、package は import または move された asset を検知し、待機中の Unity YAML asset を小さな batch で安全に reserialize し、状態を `Library/UnityScannerSync/` 以下に書く。
 
 ### update
 

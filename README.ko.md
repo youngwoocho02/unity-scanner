@@ -52,17 +52,21 @@ irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install
 
 ### Unity Editor 패키지
 
-Unity가 변경된 YAML 에셋을 scanner가 읽기 좋은 상태로 자동 reserialize하게 하려면 패키지에 추가한다.
+Unity Scanner Sync 패키지는 **Package Manager -> Add package from git URL**로 추가한다.
 
-```json
-{
-  "dependencies": {
-    "com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
-  }
-}
+```text
+https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync
 ```
 
-이 패키지는 Editor 전용이다. import 또는 move된 에셋을 감지하고, 대기 중인 Unity YAML 에셋을 작은 배치로 안전하게 reserialize하며, 상태는 `Library/UnityScannerSync/` 아래에 쓴다.
+또는 `Packages/manifest.json`에 직접 추가한다.
+
+```json
+"com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
+```
+
+특정 버전으로 고정하려면 URL 뒤에 태그를 붙인다.
+
+추가 후 패키지는 import 또는 move된 에셋을 감지하고, 대기 중인 Unity YAML 에셋을 작은 배치로 안전하게 reserialize하며, 상태는 `Library/UnityScannerSync/` 아래에 쓴다.
 
 ### 업데이트
 
