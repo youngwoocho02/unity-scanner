@@ -26,7 +26,6 @@
 ## Design
 
 - CLI reads current files only: no cache, no required editor state.
-- Optional Unity Editor package keeps changed and related assets serialized for file-based scans.
 - Unity-aware compression: hierarchy, component groups, GUIDs, path groups.
 - Compact by default: repeated data is declared once, omitted counts are shown.
 - Parallel where useful: broad scans split work by file.
@@ -49,16 +48,6 @@ irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install
 ```
 
 The installer downloads the latest release binary and adds the install directory to `PATH`. After installing, run commands as `unity-scanner ...`.
-
-### Unity Editor Package
-
-Add via **Package Manager -> Add package from git URL**:
-
-```text
-https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync
-```
-
-Once added, the package watches changed assets, expands code and asset references, safely reserializes pending Unity YAML assets in small batches, and writes status under `Library/UnityScannerSync/`.
 
 ### Update
 
@@ -456,7 +445,7 @@ Cache would make repeated scans faster, but it adds invalidation rules and stale
 
 ### No Required Editor Connection
 
-Unity Editor can provide richer type data, but then the tool depends on an open project, a connector, and editor state. `unity-scanner` stays offline by default; the optional `unity-scanner-sync` package only keeps related YAML files fresh for later CLI reads.
+Unity Editor can provide richer type data, but then the tool depends on an open project, a connector, and editor state. `unity-scanner` stays offline by default and reads project files directly.
 
 ### Compact Before Complete
 

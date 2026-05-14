@@ -9,18 +9,6 @@
 - 커밋 후 `git push origin master`로 푸시한다.
 - 푸시 후 `git status --short --branch`로 `master`와 `origin/master`가 같은지 확인한다.
 
-## Unity Editor 패키지 버전
-
-- `unity-scanner-sync`는 CLI와 별도 버전으로 관리한다.
-- 패키지 버전은 `unity-scanner-sync/package.json`의 `version`이 기준이다.
-- 패키지 설치 문서는 Package Manager에 붙여 넣을 Git URL만 짧게 제시한다.
-- manifest 직접 편집 설명, JSON 블록, 고정 버전 태그 설명은 요청 없으면 넣지 않는다.
-- 패키지만 변경한 경우 CLI 릴리스 태그 `v*`를 새로 만들지 않는다.
-- 패키지 변경 커밋은 패키지 파일, README 설치 문서, 이 규칙 문서를 함께 정리한다.
-- script/asmdef/shader류 트리거는 참조하는 Unity YAML 에셋을 찾아 reserialize 대상으로 확장한다.
-- 삭제/이동된 에셋 참조 추적은 `Library/UnityScannerSync/guid-cache.json`의 path-GUID 캐시를 사용한다.
-- 다른 Unity 프로젝트의 로컬 `file:` 테스트 manifest 변경은 unity-scanner 커밋에 포함하지 않는다.
-
 ## CLI 릴리스 절차
 
 - 기존 태그는 이동하지 않는다. 새 릴리스는 semver 기준 최신 태그의 patch 버전을 올린 새 태그로 만든다.
