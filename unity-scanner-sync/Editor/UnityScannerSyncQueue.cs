@@ -11,9 +11,11 @@ namespace UnityScannerSync
     {
         private const string DirectoryPath = "Library/UnityScannerSync";
         private const string PendingPath = DirectoryPath + "/pending.json";
+        private const string ChangesPath = DirectoryPath + "/changes.json";
         private const string StatusPath = DirectoryPath + "/status.json";
         private const string LogPath = DirectoryPath + "/log.jsonl";
         private const string GuidCachePath = DirectoryPath + "/guid-cache.json";
+        private const string GuidCacheAppendPath = DirectoryPath + "/guid-cache.jsonl";
         private const int SchemaVersion = 1;
 
         private static string PackageVersion => PackageInfo.FindForAssembly(typeof(UnityScannerSyncQueue).Assembly)?.version ?? "0.0.0";
@@ -25,6 +27,25 @@ namespace UnityScannerSync
             public string packageVersion;
             public string updatedAtUtc;
             public List<string> paths = new();
+        }
+
+        [Serializable]
+        internal sealed class ChangeRecord
+        {
+            public string kind;
+            public string path;
+            public string previousPath;
+            public string guid;
+            public string cachedGuid;
+        }
+
+        [Serializable]
+        private sealed class ChangesFile
+        {
+            public int schemaVersion;
+            public string packageVersion;
+            public string updatedAtUtc;
+            public List<ChangeRecord> changes = new();
         }
 
         [Serializable]
@@ -90,41 +111,92 @@ namespace UnityScannerSync
             File.WriteAllText(PendingPath, JsonUtility.ToJson(file, true));
         }
 
-        internal static Dictionary<string, string> ReadGuidCache()
+        internal static List<ChangeRecord> ReadChanges()
         {
-            if (!File.Exists(GuidCachePath))
-                return new Dictionary<string, string>(StringComparer.Ordinal);
+            if (!File.Exists(ChangesPath))
+                return new List<ChangeRecord>();
 
             try
             {
-                var file = JsonUtility.FromJson<GuidCacheFile>(File.ReadAllText(GuidCachePath));
-                return file?.entries
-                    .Where(entry => !string.IsNullOrEmpty(entry.path) && !string.IsNullOrEmpty(entry.guid))
-                    .GroupBy(entry => entry.path, StringComparer.Ordinal)
-                    .ToDictionary(group => group.Key, group => group.Last().guid, StringComparer.Ordinal)
-                    ?? new Dictionary<string, string>(StringComparer.Ordinal);
+                var file = JsonUtility.FromJson<ChangesFile>(File.ReadAllText(ChangesPath));
+                return file?.changes ?? new List<ChangeRecord>();
             }
             catch (Exception exception)
             {
-                WriteLog("guid-cache-read-error", exception.Message);
-                return new Dictionary<string, string>(StringComparer.Ordinal);
+                WriteLog("changes-read-error", exception.Message);
+                return new List<ChangeRecord>();
             }
         }
 
-        internal static void WriteGuidCache(IDictionary<string, string> guidsByPath)
+        internal static void WriteChanges(IEnumerable<ChangeRecord> changes)
         {
             EnsureDirectory();
-            var file = new GuidCacheFile
+            var file = new ChangesFile
             {
                 schemaVersion = SchemaVersion,
                 packageVersion = PackageVersion,
                 updatedAtUtc = DateTime.UtcNow.ToString("O"),
-                entries = guidsByPath
-                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .Select(pair => new GuidCacheEntry { path = pair.Key, guid = pair.Value })
-                    .ToList()
+                changes = new List<ChangeRecord>(changes)
             };
-            File.WriteAllText(GuidCachePath, JsonUtility.ToJson(file, true));
+            File.WriteAllText(ChangesPath, JsonUtility.ToJson(file, true));
+        }
+
+        internal static Dictionary<string, string> ReadGuidCache(IEnumerable<string> paths)
+        {
+            var wantedPaths = new HashSet<string>(paths?.Where(path => !string.IsNullOrEmpty(path)) ?? Array.Empty<string>(), StringComparer.Ordinal);
+            if (wantedPaths.Count == 0)
+                return new Dictionary<string, string>(StringComparer.Ordinal);
+
+            var cache = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            try
+            {
+                if (File.Exists(GuidCachePath))
+                {
+                    var file = JsonUtility.FromJson<GuidCacheFile>(File.ReadAllText(GuidCachePath));
+                    if (file?.entries != null)
+                    {
+                        foreach (var entry in file.entries)
+                        {
+                            if (!wantedPaths.Contains(entry.path) || string.IsNullOrEmpty(entry.guid))
+                                continue;
+
+                            cache[entry.path] = entry.guid;
+                        }
+                    }
+                }
+
+                if (File.Exists(GuidCacheAppendPath))
+                {
+                    foreach (var line in File.ReadLines(GuidCacheAppendPath))
+                    {
+                        var entry = JsonUtility.FromJson<GuidCacheEntry>(line);
+                        if (!wantedPaths.Contains(entry.path) || string.IsNullOrEmpty(entry.guid))
+                            continue;
+
+                        cache[entry.path] = entry.guid;
+                    }
+                }
+
+                return cache;
+            }
+            catch (Exception exception)
+            {
+                WriteLog("guid-cache-read-error", exception.Message);
+                return cache;
+            }
+        }
+
+        internal static void AppendGuidCache(IEnumerable<KeyValuePair<string, string>> guidsByPath)
+        {
+            EnsureDirectory();
+            foreach (var pair in guidsByPath)
+            {
+                if (string.IsNullOrEmpty(pair.Key) || string.IsNullOrEmpty(pair.Value))
+                    continue;
+
+                File.AppendAllText(GuidCacheAppendPath, JsonUtility.ToJson(new GuidCacheEntry { path = pair.Key, guid = pair.Value }) + Environment.NewLine);
+            }
         }
 
         internal static void WriteStatus(string mode, int pendingCount, int lastFlushCount, string blockedReason, string lastError)
