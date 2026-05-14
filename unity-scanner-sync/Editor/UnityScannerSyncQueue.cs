@@ -111,7 +111,7 @@ namespace UnityScannerSync
             }
         }
 
-        internal static void WriteGuidCache(IReadOnlyDictionary<string, string> guidsByPath)
+        internal static void WriteGuidCache(IDictionary<string, string> guidsByPath)
         {
             EnsureDirectory();
             var file = new GuidCacheFile
