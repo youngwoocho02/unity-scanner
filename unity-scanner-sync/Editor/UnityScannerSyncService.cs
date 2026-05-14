@@ -14,6 +14,7 @@ namespace UnityScannerSync
         private const float DebounceSeconds = 2f;
         private const int MaxBatchSize = 64;
         private const bool IncludeDependentPrefabs = true;
+        private const int ReferenceScanLogLimit = 12;
 
         private static readonly HashSet<string> PendingPaths = new(StringComparer.Ordinal);
         private static double _lastChangeTime;
@@ -44,10 +45,7 @@ namespace UnityScannerSync
             var changed = false;
             foreach (var path in paths)
             {
-                if (!ShouldTrackPath(path))
-                    continue;
-
-                changed |= PendingPaths.Add(NormalizePath(path));
+                changed |= EnqueueChangedPath(path);
             }
 
             if (!changed)
@@ -102,13 +100,13 @@ namespace UnityScannerSync
 
             AddDependentPrefabs();
             var batch = PendingPaths
-                .Where(ShouldReserializePath)
+                .Where(ShouldReserializeExistingAsset)
                 .Take(MaxBatchSize)
                 .ToList();
 
             if (batch.Count == 0)
             {
-                PendingPaths.RemoveWhere(path => !ShouldReserializePath(path));
+                PendingPaths.RemoveWhere(path => !ShouldReserializeExistingAsset(path));
                 SavePending();
                 WriteStatus(null, 0);
                 return;
@@ -145,7 +143,7 @@ namespace UnityScannerSync
             PendingPaths.Clear();
             foreach (var path in UnityScannerSyncQueue.ReadPending())
             {
-                if (ShouldTrackPath(path))
+                if (ShouldReserializeExistingAsset(path))
                     PendingPaths.Add(NormalizePath(path));
             }
 
@@ -156,6 +154,30 @@ namespace UnityScannerSync
         private static void SavePending()
         {
             UnityScannerSyncQueue.WritePending(PendingPaths.OrderBy(path => path, StringComparer.Ordinal));
+        }
+
+        private static bool EnqueueChangedPath(string path)
+        {
+            path = NormalizePath(path);
+            if (ShouldReserializeExistingAsset(path))
+                return PendingPaths.Add(path);
+
+            if (!ShouldUseAsReferenceTrigger(path))
+                return false;
+
+            var referenceGuids = CollectReferenceTriggerGuids(path);
+            if (referenceGuids.Count == 0)
+                return false;
+
+            var referencedAssets = FindSerializedAssetsReferencingGuids(referenceGuids);
+            var changed = false;
+            foreach (var referencedAsset in referencedAssets)
+                changed |= PendingPaths.Add(referencedAsset);
+
+            if (changed)
+                UnityScannerSyncQueue.WriteLog("reference-scan", $"{path}\nguids={referenceGuids.Count}\nassets={referencedAssets.Count}");
+
+            return changed;
         }
 
         private static void AddDependentPrefabs()
@@ -181,7 +203,7 @@ namespace UnityScannerSync
                 if (!dependencies.Any(sourceSet.Contains))
                     continue;
 
-                if (ShouldTrackPath(prefabPath) && PendingPaths.Add(prefabPath))
+                if (ShouldQueueSerializedPath(prefabPath) && PendingPaths.Add(prefabPath))
                     added++;
             }
 
@@ -205,7 +227,70 @@ namespace UnityScannerSync
             return null;
         }
 
-        private static bool ShouldTrackPath(string path)
+        private static List<string> CollectReferenceTriggerGuids(string path)
+        {
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+            if (extension is ".asmdef" or ".asmref")
+                return CollectAssemblyScriptGuids(path);
+
+            var guid = AssetDatabase.AssetPathToGUID(path);
+            if (string.IsNullOrEmpty(guid))
+                return new List<string>();
+
+            return new List<string> { guid };
+        }
+
+        private static List<string> CollectAssemblyScriptGuids(string assemblyPath)
+        {
+            var root = NormalizePath(Path.GetDirectoryName(assemblyPath) ?? "Assets");
+            if (string.IsNullOrEmpty(root))
+                root = "Assets";
+
+            var nestedAssemblyFolders = Directory
+                .EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+                .Select(NormalizePath)
+                .Where(path => path != assemblyPath && IsAssemblyDefinitionPath(path))
+                .Select(path => NormalizePath(Path.GetDirectoryName(path) ?? string.Empty) + "/")
+                .Where(path => path.Length > 1)
+                .ToArray();
+
+            return Directory
+                .EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+                .Select(NormalizePath)
+                .Where(path => !nestedAssemblyFolders.Any(folder => path.StartsWith(folder, StringComparison.Ordinal)))
+                .Select(AssetDatabase.AssetPathToGUID)
+                .Where(guid => !string.IsNullOrEmpty(guid))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private static List<string> FindSerializedAssetsReferencingGuids(IReadOnlyCollection<string> guids)
+        {
+            if (guids.Count == 0)
+                return new List<string>();
+
+            var assets = Directory
+                .EnumerateFiles("Assets", "*.*", SearchOption.AllDirectories)
+                .Select(NormalizePath)
+                .Where(ShouldReserializeExistingAsset)
+                .Where(path => FileContainsAnyGuid(path, guids))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToList();
+
+            if (assets.Count > ReferenceScanLogLimit)
+                UnityScannerSyncQueue.WriteLog("reference-scan-sample", string.Join("\n", assets.Take(ReferenceScanLogLimit)));
+
+            return assets;
+        }
+
+        private static bool FileContainsAnyGuid(string path, IReadOnlyCollection<string> guids)
+        {
+            var text = File.ReadAllText(path);
+            return guids.Any(guid => text.Contains(guid, StringComparison.Ordinal));
+        }
+
+        private static bool ShouldQueueSerializedPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
                 return false;
@@ -215,12 +300,31 @@ namespace UnityScannerSync
                 return false;
 
             var extension = Path.GetExtension(path).ToLowerInvariant();
-            return extension is ".prefab" or ".unity" or ".asset" or ".mat" or ".controller" or ".overridecontroller" or ".anim" or ".asmdef";
+            return extension is ".prefab" or ".unity" or ".asset" or ".mat" or ".controller" or ".overridecontroller" or ".anim";
         }
 
-        private static bool ShouldReserializePath(string path)
+        private static bool ShouldUseAsReferenceTrigger(string path)
         {
-            if (!ShouldTrackPath(path))
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+
+            path = NormalizePath(path);
+            if (!path.StartsWith("Assets/", StringComparison.Ordinal) && !path.StartsWith("Packages/", StringComparison.Ordinal))
+                return false;
+
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+            return extension is ".cs" or ".asmdef" or ".asmref" or ".shader" or ".shadergraph" or ".compute" or ".hlsl" or ".cginc" or ".uss" or ".uxml";
+        }
+
+        private static bool IsAssemblyDefinitionPath(string path)
+        {
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+            return extension is ".asmdef" or ".asmref";
+        }
+
+        private static bool ShouldReserializeExistingAsset(string path)
+        {
+            if (!ShouldQueueSerializedPath(path))
                 return false;
 
             if (AssetDatabase.AssetPathToGUID(path).Length == 0)
