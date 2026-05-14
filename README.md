@@ -52,19 +52,11 @@ The installer downloads the latest release binary and adds the install directory
 
 ### Unity Editor Package
 
-Add the Unity Scanner Sync package via **Package Manager -> Add package from git URL**:
+Add via **Package Manager -> Add package from git URL**:
 
 ```text
 https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync
 ```
-
-Or add directly to `Packages/manifest.json`:
-
-```json
-"com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
-```
-
-To pin a specific version, append a tag to the URL.
 
 Once added, the package watches imported or moved assets, safely reserializes pending Unity YAML assets in small batches, and writes status under `Library/UnityScannerSync/`.
 

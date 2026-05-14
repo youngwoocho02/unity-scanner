@@ -13,8 +13,8 @@
 
 - `unity-scanner-sync`는 CLI와 별도 버전으로 관리한다.
 - 패키지 버전은 `unity-scanner-sync/package.json`의 `version`이 기준이다.
-- 패키지 설치 문서는 `https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync` 형식을 쓴다.
-- 고정 버전 설치가 필요할 때만 `#sync/v<version>` 태그를 별도로 붙인다.
+- 패키지 설치 문서는 Package Manager에 붙여 넣을 Git URL만 짧게 제시한다.
+- manifest 직접 편집 설명, JSON 블록, 고정 버전 태그 설명은 요청 없으면 넣지 않는다.
 - 패키지만 변경한 경우 CLI 릴리스 태그 `v*`를 새로 만들지 않는다.
 - 패키지 변경 커밋은 패키지 파일, README 설치 문서, 이 규칙 문서를 함께 정리한다.
 - 다른 Unity 프로젝트의 로컬 `file:` 테스트 manifest 변경은 unity-scanner 커밋에 포함하지 않는다.

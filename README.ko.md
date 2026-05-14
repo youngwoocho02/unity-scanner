@@ -52,19 +52,11 @@ irm https://raw.githubusercontent.com/youngwoocho02/unity-scanner/master/install
 
 ### Unity Editor 패키지
 
-Unity Scanner Sync 패키지는 **Package Manager -> Add package from git URL**로 추가한다.
+**Package Manager -> Add package from git URL**로 추가한다.
 
 ```text
 https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync
 ```
-
-또는 `Packages/manifest.json`에 직접 추가한다.
-
-```json
-"com.youngwoocho02.unity-scanner-sync": "https://github.com/youngwoocho02/unity-scanner.git?path=/unity-scanner-sync"
-```
-
-특정 버전으로 고정하려면 URL 뒤에 태그를 붙인다.
 
 추가 후 패키지는 import 또는 move된 에셋을 감지하고, 대기 중인 Unity YAML 에셋을 작은 배치로 안전하게 reserialize하며, 상태는 `Library/UnityScannerSync/` 아래에 쓴다.
 
