@@ -1,6 +1,6 @@
 {
   "name": "com.youngwoocho02.unity-scanner-sync",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "displayName": "Unity Scanner Sync",
   "description": "Editor-only YAML freshness helper for unity-scanner. Queues imported assets and safely reserializes them in small batches.",
   "unity": "6000.0",
