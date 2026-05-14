@@ -238,7 +238,9 @@ namespace UnityScannerSync
                     missingGuidChanges.Add(change);
             }
 
-            var relatedAssets = ExpandSerializedAssetsReferencingGuids(seedGuids);
+            var relatedAssets = new List<string>();
+            if (seedGuids.Count > 0)
+                WriteSyncLog("reference-scan-skip", $"Full YAML reference scan skipped. Seed GUIDs: {seedGuids.Count}. Direct YAML and prefab dependency expansion will be reserialized.");
             foreach (var path in directlyChangedSerializedAssets.Concat(relatedAssets))
                 PendingPaths.Add(path);
 
